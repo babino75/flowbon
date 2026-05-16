@@ -1,0 +1,257 @@
+import os
+from datetime import date, datetime
+from pathlib import Path
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.core.dependencies import get_current_active_user, get_db
+from app.models.attachment import Attachment
+from app.models.company import Company
+from app.models.expense import ExpenseRequest, ExpenseStatus
+from app.models.user import User
+from app.schemas.attachment import AttachmentResponse
+from app.schemas.expense import ExpenseCreateSchema, ExpenseResponse, ExpenseUpdateSchema
+from app.services.tenant import (
+    get_expense_for_company,
+    get_attachment_for_expense,
+    list_expenses_for_company,
+)
+from app.utils.files import MAX_ATTACHMENTS_PER_EXPENSE, ensure_upload_dir, save_upload, validate_upload
+
+router = APIRouter(prefix="/expenses", tags=["expenses"])
+
+UPLOAD_DIR = settings.uploads_dir
+ensure_upload_dir(UPLOAD_DIR)
+
+
+@router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+def create_expense(
+    expense_in: ExpenseCreateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.company_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Utilisateur sans entreprise")
+
+    if expense_in.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status invalide")
+
+    company = db.query(Company).filter(Company.id == current_user.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    currency = expense_in.currency or getattr(company, "default_currency", "EUR")
+    if not currency:
+        currency = "EUR"
+
+    submitted_at = datetime.utcnow() if expense_in.status == ExpenseStatus.pending.value else None
+
+    expense = ExpenseRequest(
+        company_id=current_user.company_id,
+        user_id=current_user.id,
+        amount=expense_in.amount,
+        currency=currency,
+        category=expense_in.category,
+        description=expense_in.description,
+        status=expense_in.status,
+        expense_date=expense_in.expense_date,
+        submitted_at=submitted_at,
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+@router.get("", response_model=List[ExpenseResponse])
+def list_expenses(
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    from_date: Optional[date] = Query(None, alias="from"),
+    to_date: Optional[date] = Query(None, alias="to"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    filters = {
+        "status": status,
+        "category": category,
+        "from_date": from_date,
+        "to_date": to_date,
+        "page": page,
+        "limit": limit,
+    }
+    return list_expenses_for_company(db, current_user, filters)
+
+
+@router.get("/{expense_id}", response_model=ExpenseResponse)
+def get_expense(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+    return expense
+
+
+@router.patch("/{expense_id}", response_model=ExpenseResponse)
+def update_expense(
+    expense_id: str,
+    expense_update: ExpenseUpdateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    if expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon ne peut plus être modifié")
+
+    for field, value in expense_update.model_dump(exclude_unset=True).items():
+        setattr(expense, field, value)
+
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+@router.delete("/{expense_id}")
+def delete_expense(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    if expense.status != ExpenseStatus.draft.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seuls les brouillons peuvent être supprimés")
+
+    db.delete(expense)
+    db.commit()
+    return {"message": "Bon supprimé"}
+
+
+@router.post("/{expense_id}/submit", response_model=ExpenseResponse)
+def submit_expense(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    if expense.status != ExpenseStatus.draft.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être en brouillon pour être soumis")
+
+    expense.status = ExpenseStatus.pending.value
+    expense.submitted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+@router.post("/{expense_id}/cancel", response_model=ExpenseResponse)
+def cancel_expense(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    if expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon ne peut pas être annulé")
+
+    expense.status = ExpenseStatus.cancelled.value
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+@router.post("/{expense_id}/attachments", response_model=List[AttachmentResponse])
+def upload_attachments(
+    expense_id: str,
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    existing_attachments = db.query(Attachment).filter(Attachment.expense_request_id == expense.id).count()
+    if existing_attachments + len(files) > MAX_ATTACHMENTS_PER_EXPENSE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Maximum {MAX_ATTACHMENTS_PER_EXPENSE} justificatifs par bon")
+
+    saved_attachments: List[Attachment] = []
+    upload_dir = Path(UPLOAD_DIR)
+
+    for file in files:
+        file_size = validate_upload(file)
+        saved_file_name = save_upload(file, upload_dir)
+        file_url = f"/uploads/{saved_file_name}"
+
+        attachment = Attachment(
+            company_id=expense.company_id,
+            expense_request_id=expense.id,
+            file_url=file_url,
+            file_name=file.filename,
+            file_size=file_size,
+            file_type=file.content_type or "application/octet-stream",
+        )
+        db.add(attachment)
+        saved_attachments.append(attachment)
+
+    db.commit()
+    for attachment in saved_attachments:
+        db.refresh(attachment)
+    return saved_attachments
+
+
+@router.delete("/{expense_id}/attachments/{attachment_id}")
+def delete_attachment(
+    expense_id: str,
+    attachment_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if expense.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    attachment = get_attachment_for_expense(db, attachment_id, expense)
+    if not attachment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Justificatif non trouvé")
+
+    db.delete(attachment)
+    db.commit()
+    return {"message": "Justificatif supprimé"}

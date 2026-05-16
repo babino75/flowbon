@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16
+    container_name: flowbon-db
+    restart: always
+    environment:
+      POSTGRES_USER: flowbon
+      POSTGRES_PASSWORD: flowbon123
+      POSTGRES_DB: flowbon
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    container_name: flowbon-backend
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://flowbon:flowbon123@db:5432/flowbon
+      APP_NAME: FlowBon
+      APP_ENV: local
+      FRONTEND_URL: http://localhost:3000
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: flowbon-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      - INTERNAL_API_URL=http://backend:8000
+
+volumes:
+  pgdata:
