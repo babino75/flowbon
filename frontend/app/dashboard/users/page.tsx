@@ -154,90 +154,92 @@ export default function UsersPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Nom</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Email</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rôle</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Droits Suppléants</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {users.map((userRow) => (
-                  <tr key={userRow.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{userRow.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{userRow.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={roleUpdates[userRow.id] ?? userRow.role}
-                          onChange={(e) => handleRoleChange(userRow.id, e.target.value)}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                        >
-                          {roles.map((roleOption) => (
-                            <option key={roleOption} value={roleOption}>
-                              {roleOption}
-                            </option>
-                          ))}
-                        </select>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Nom</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rôle</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Droits Suppléants</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {users.map((userRow) => (
+                    <tr key={userRow.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{userRow.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{userRow.email}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={roleUpdates[userRow.id] ?? userRow.role}
+                            onChange={(e) => handleRoleChange(userRow.id, e.target.value)}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                          >
+                            {roles.map((roleOption) => (
+                              <option key={roleOption} value={roleOption}>
+                                {roleOption}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => updateRole(userRow.id)}
+                            className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+                          >
+                            Mettre à jour
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {userRow.role === "admin" || userRow.role === "super_admin" ? (
+                          <span className="text-xs text-slate-400 italic">Tous les droits (Admin)</span>
+                        ) : userRow.role === "employee" ? (
+                          <span className="text-xs text-slate-400 italic">Aucun droit suppléant (Employé)</span>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={userRow.is_backup_manager}
+                                onChange={() => toggleBackupManager(userRow)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span>Manager suppléant</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={userRow.is_backup_accountant}
+                                onChange={() => toggleBackupAccountant(userRow)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span>Comptable suppléant</span>
+                            </label>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`inline-flex rounded-full px-3 py-1 font-medium ${userRow.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {userRow.is_active ? 'Actif' : 'Désactivé'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           type="button"
-                          onClick={() => updateRole(userRow.id)}
+                          onClick={() => toggleActive(userRow.id, userRow.is_active)}
                           className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
                         >
-                          Mettre à jour
+                          {userRow.is_active ? 'Désactiver' : 'Activer'}
                         </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {userRow.role === "admin" || userRow.role === "super_admin" ? (
-                        <span className="text-xs text-slate-400 italic">Tous les droits (Admin)</span>
-                      ) : userRow.role === "employee" ? (
-                        <span className="text-xs text-slate-400 italic">Aucun droit suppléant (Employé)</span>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={userRow.is_backup_manager}
-                              onChange={() => toggleBackupManager(userRow)}
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span>Manager suppléant</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={userRow.is_backup_accountant}
-                              onChange={() => toggleBackupAccountant(userRow)}
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span>Comptable suppléant</span>
-                          </label>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`inline-flex rounded-full px-3 py-1 font-medium ${userRow.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {userRow.is_active ? 'Actif' : 'Désactivé'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        type="button"
-                        onClick={() => toggleActive(userRow.id, userRow.is_active)}
-                        className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
-                      >
-                        {userRow.is_active ? 'Désactiver' : 'Activer'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

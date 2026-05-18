@@ -25,6 +25,7 @@ def get_filters(
     category_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None),
     user_id: Optional[UUID] = Query(None),
+    fiscal_year_id: Optional[UUID] = Query(None),
 ):
     return {
         "from_date": from_date,
@@ -32,6 +33,7 @@ def get_filters(
         "category_id": category_id,
         "status": status,
         "user_id": user_id,
+        "fiscal_year_id": fiscal_year_id,
     }
 
 
@@ -66,6 +68,7 @@ def monthly_trend(
 def recent_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    status: Optional[str] = Query(None),
+    filters: dict = Depends(get_filters),
 ):
-    return get_recent_expenses(db, current_user, status=status)
+    return get_recent_expenses(db, current_user, filters)
+

@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FlowBon SaaS — Fichier Caddyfile (Reverse Proxy HTTPS)
+#
+# Ce fichier configure Caddy comme reverse proxy devant le frontend et le backend.
+# HTTPS + certificat Let's Encrypt sont gérés automatiquement.
+#
+# Remplacer {$DOMAIN} par votre nom de domaine, ou utiliser la variable d'env.
+# ─────────────────────────────────────────────────────────────────────────────
+
+{$DOMAIN} {
+
+  # Toutes les requêtes vers /api/* sont redirigées vers le backend FastAPI.
+  handle /api/* {
+    reverse_proxy backend:8000
+  }
+
+  # Toutes les autres requêtes vont vers l'application frontend Next.js.
+  handle {
+    reverse_proxy frontend:3000
+  }
+
+  # En-têtes de sécurité HTTP (bonnes pratiques SaaS)
+  header {
+    # Évite le clickjacking
+    X-Frame-Options "SAMEORIGIN"
+    # Protection XSS
+    X-Content-Type-Options "nosniff"
+    # Strict HTTPS pour 1 an
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    # Retire l'en-tête "Server"
+    -Server
+  }
+
+  # Compression automatique (gzip/zstd)
+  encode gzip zstd
+
+  # Logs de Caddy
+  log {
+    output file /data/logs/flowbon_access.log {
+      roll_size 100mb
+      roll_keep 7
+      roll_keep_for 720h
+    }
+    format json
+  }
+}

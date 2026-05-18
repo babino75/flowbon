@@ -23,6 +23,7 @@ from app.services.tenant import (
     get_expense_logs_for_company,
 )
 from app.services import notification_service
+from app.services.fiscal_year_service import get_active_fiscal_year
 from app.utils.files import MAX_ATTACHMENTS_PER_EXPENSE, ensure_upload_dir, save_upload, validate_upload
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -53,6 +54,9 @@ def create_expense(
 
     submitted_at = datetime.utcnow() if expense_in.status == ExpenseStatus.pending.value else None
 
+    # Auto-assigner l'exercice comptable actif
+    active_fy = get_active_fiscal_year(db, current_user.company_id)
+
     expense = ExpenseRequest(
         company_id=current_user.company_id,
         user_id=current_user.id,
@@ -64,6 +68,7 @@ def create_expense(
         expense_date=expense_in.expense_date,
         submitted_at=submitted_at,
         advance_id=expense_in.advance_id,
+        fiscal_year_id=active_fy.id if active_fy else None,
     )
     db.add(expense)
     db.commit()

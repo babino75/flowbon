@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../../lib/api";
+import { translateStatus } from "../../../lib/utils";
 
 const statuses = ["draft", "pending"];
 
@@ -284,7 +285,7 @@ export default function NewExpensePage() {
               >
                 {statuses.map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    {translateStatus(status)}
                   </option>
                 ))}
               </select>

@@ -368,6 +368,10 @@ def purge_company(
     # Expenses
     db.query(ExpenseRequest).filter(ExpenseRequest.company_id == uid).delete(synchronize_session=False)
 
+    # Fiscal Years
+    from app.models.fiscal_year import FiscalYear
+    db.query(FiscalYear).filter(FiscalYear.company_id == uid).delete(synchronize_session=False)
+
     # Advances
     db.query(AdvanceRequest).filter(AdvanceRequest.company_id == uid).delete(synchronize_session=False)
 

@@ -61,43 +61,45 @@ export default function PaymentsPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Catégorie</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {expenses.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
                   <tr>
-                    <td colSpan={5} className="px-6 py-16 text-center text-sm text-slate-500">
-                      Aucun paiement en attente.
-                    </td>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Catégorie</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
                   </tr>
-                ) : (
-                  expenses.map((expense) => (
-                    <tr key={expense.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.expense_date}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.amount} {expense.currency}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.category}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-600 font-medium capitalize">{translateStatus(expense.status)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          href={`/dashboard/expenses/${expense.id}`}
-                          className="inline-flex rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
-                        >
-                          Gérer le paiement
-                        </Link>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {expenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-16 text-center text-sm text-slate-500">
+                        Aucun paiement en attente.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    expenses.map((expense) => (
+                      <tr key={expense.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.expense_date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.amount} {expense.currency}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.category}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-600 font-medium capitalize">{translateStatus(expense.status)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <Link
+                            href={`/dashboard/expenses/${expense.id}`}
+                            className="inline-flex rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+                          >
+                            Gérer le paiement
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

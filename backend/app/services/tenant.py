@@ -98,10 +98,13 @@ def _apply_dashboard_filters(query, current_user: User, filters: dict):
         if current_user.role == "employee":
             query = query.filter(ExpenseRequest.user_id == current_user.id)
 
-    if filters.get("from_date"):
-        query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
-    if filters.get("to_date"):
-        query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
+    if filters.get("fiscal_year_id"):
+        query = query.filter(ExpenseRequest.fiscal_year_id == filters["fiscal_year_id"])
+    else:
+        if filters.get("from_date"):
+            query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
+        if filters.get("to_date"):
+            query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
         
     if filters.get("category_id"):
         query = query.filter(ExpenseRequest.category_id == filters["category_id"])
@@ -111,6 +114,7 @@ def _apply_dashboard_filters(query, current_user: User, filters: dict):
         query = query.filter(ExpenseRequest.user_id == filters["user_id"])
     
     return query
+
 
 
 def get_dashboard_summary(db: Session, current_user: User, filters: dict):
@@ -153,7 +157,8 @@ def get_expenses_by_category(db: Session, current_user: User, filters: dict):
         ExpenseCategory.name.label("category"),
         func.sum(ExpenseRequest.amount).label("total")
     ).join(ExpenseRequest.category_rel)
-    query = query.filter(ExpenseRequest.status.in_(["approved", "paid"]))
+    if not filters.get("status"):
+        query = query.filter(ExpenseRequest.status.in_(["approved", "paid"]))
     query = _apply_dashboard_filters(query, current_user, filters)
     results = query.group_by(ExpenseCategory.name).all()
     return [{"category": r.category, "total": float(r.total or 0)} for r in results]
@@ -163,22 +168,19 @@ def get_monthly_trend(db: Session, current_user: User, filters: dict):
     query = db.query(
         func.to_char(ExpenseRequest.expense_date, 'YYYY-MM').label("month"),
         func.sum(ExpenseRequest.amount).label("total")
-    ).filter(ExpenseRequest.status.in_(["approved", "paid"]))
-    
+    )
+    if not filters.get("status"):
+        query = query.filter(ExpenseRequest.status.in_(["approved", "paid"]))
     query = _apply_dashboard_filters(query, current_user, filters)
     results = query.group_by("month").order_by("month").all()
     return [{"month": r.month, "total": float(r.total or 0)} for r in results]
 
 
-def get_recent_expenses(db: Session, current_user: User, limit: int = 10, status: str | None = None):
+def get_recent_expenses(db: Session, current_user: User, filters: dict, limit: int = 10):
     query = db.query(ExpenseRequest).options(joinedload(ExpenseRequest.user))
-    if current_user.role != "super_admin":
-        query = query.filter(ExpenseRequest.company_id == current_user.company_id)
-        if current_user.role == "employee":
-            query = query.filter(ExpenseRequest.user_id == current_user.id)
-    if status:
-        query = query.filter(ExpenseRequest.status == status)
+    query = _apply_dashboard_filters(query, current_user, filters)
     return query.order_by(ExpenseRequest.created_at.desc()).limit(limit).all()
+
 
 
 def seed_default_categories(db: Session, company_id):

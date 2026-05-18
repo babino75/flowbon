@@ -1,0 +1,129 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FlowBon SaaS — Docker Compose de Production
+# Version : 1.0
+#
+# INSTRUCTIONS :
+#   1. Copier le fichier ".env.example" en ".env" et remplir toutes les valeurs.
+#   2. Lancer avec : docker compose -f docker-compose.prod.yml up -d
+#
+# IMPORTANT :
+#   - Ne pas exposer les ports 5432, 8000, 3000 sur l'internet public.
+#   - Le port 443 (HTTPS) est géré automatiquement par Caddy + Let's Encrypt.
+#   - Les données PostgreSQL sont persistées dans le volume "pgdata".
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── Base de Données PostgreSQL ─────────────────────────────────────────────
+  # Image officielle stateless. Les données résident UNIQUEMENT dans le volume.
+  db:
+    image: postgres:16
+    container_name: flowbon-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # NE PAS exposer le port 5432 sur l'internet public.
+    # Accessible uniquement en interne via le réseau Docker "flowbon-net".
+    networks:
+      - flowbon-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─── Backend API (FastAPI) ───────────────────────────────────────────────────
+  # Remplacer l'image par votre registre privé ou Docker Hub.
+  # Exemple : votreregisre/flowbon-backend:latest
+  backend:
+    image: ${BACKEND_IMAGE:-flowbon/backend:latest}
+    container_name: flowbon-backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      REFRESH_TOKEN_EXPIRE_DAYS: 30
+      APP_NAME: FlowBon
+      APP_ENV: production
+      FRONTEND_URL: https://${DOMAIN}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+    # Port 8000 accessible uniquement en interne.
+    networks:
+      - flowbon-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ─── Frontend (Next.js) ──────────────────────────────────────────────────────
+  # Remplacer l'image par votre registre privé ou Docker Hub.
+  # Exemple : votreregistre/flowbon-frontend:latest
+  frontend:
+    image: ${FRONTEND_IMAGE:-flowbon/frontend:latest}
+    container_name: flowbon-frontend
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      INTERNAL_API_URL: http://backend:8000
+      NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
+    # Port 3000 accessible uniquement en interne via Caddy.
+    networks:
+      - flowbon-net
+
+  # ─── Reverse Proxy (Caddy) + HTTPS Automatique (Let's Encrypt) ──────────────
+  # Caddy gère automatiquement les certificats SSL/TLS via Let's Encrypt.
+  # Remplacer la variable DOMAIN par votre nom de domaine dans le fichier .env.
+  caddy:
+    image: caddy:2-alpine
+    container_name: flowbon-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC)
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - flowbon-net
+
+# ─── Volumes Persistants ──────────────────────────────────────────────────────
+volumes:
+  pgdata:
+    name: flowbon_pgdata
+  uploads:
+    name: flowbon_uploads
+  caddy_data:
+    name: flowbon_caddy_data
+  caddy_config:
+    name: flowbon_caddy_config
+
+# ─── Réseau Interne Isolé ─────────────────────────────────────────────────────
+networks:
+  flowbon-net:
+    name: flowbon-net
+    driver: bridge

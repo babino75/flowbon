@@ -29,12 +29,14 @@ function buildDateRange(period: string) {
 
 function KpiCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   return (
-    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100">
-      <div className="p-5 flex items-center">
-        <div className={`flex-shrink-0 ${color} rounded-md p-3`}>{icon}</div>
-        <div className="ml-5 w-0 flex-1">
-          <p className="text-sm font-medium text-gray-500 truncate">{label}</p>
-          <p className="text-xl font-bold text-gray-900 mt-1 truncate">{value}</p>
+    <div className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-100 hover:shadow-md transition-shadow duration-200">
+      <div className="p-3.5 flex items-center gap-3">
+        <div className={`flex-shrink-0 ${color} rounded-xl p-2.5 flex items-center justify-center`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">{label}</p>
+          <p className="text-base font-black text-slate-800 mt-0.5 truncate">{value}</p>
         </div>
       </div>
     </div>
@@ -193,7 +195,19 @@ function TrialCountdownBanner({ trialExpiresAt }: { trialExpiresAt: string }) {
 
 // ─── Role-specific dashboard sections ─────────────────────────────────────────
 
-function EmployeeDashboard({ summary, recentExpenses, loading, currency }: any) {
+function EmployeeDashboard({ 
+  summary, 
+  recentExpenses, 
+  loading, 
+  currency,
+  period,
+  setPeriod,
+  selectedStatus,
+  setSelectedStatus,
+  selectedCategory,
+  setSelectedCategory,
+  categories
+}: any) {
   return (
     <>
       <div className="mb-6 flex flex-wrap gap-3">
@@ -201,13 +215,25 @@ function EmployeeDashboard({ summary, recentExpenses, loading, currency }: any) 
         <QuickActionLink href="/dashboard/expenses" label="📋 Tous mes bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
       </div>
+
+      <DashboardFilterBar
+        period={period}
+        setPeriod={setPeriod}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        categories={categories}
+        showEmployeeFilter={false}
+      />
+
       {loading || !summary ? <LoadingSpinner /> : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600" />
-            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600" />
-            <KpiCard icon={<MoneyIcon />} label="Payés" value={String(summary.paid_count)} color="bg-green-100 text-green-600" />
-            <KpiCard icon={<TotalIcon />} label="Total remboursé" value={`${summary.total_spent.toLocaleString()} ${currency}`} color="bg-indigo-100 text-indigo-600" />
+            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600 animate-fade-in" />
+            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600 animate-fade-in" />
+            <KpiCard icon={<MoneyIcon />} label="Payés" value={String(summary.paid_count)} color="bg-green-100 text-green-600 animate-fade-in" />
+            <KpiCard icon={<TotalIcon />} label="Total remboursé" value={`${summary.total_spent.toLocaleString()} ${currency}`} color="bg-indigo-100 text-indigo-600 animate-fade-in" />
           </div>
           <SectionCard title="Mes derniers bons" linkHref="/dashboard/expenses" linkLabel="Voir tout">
             <RecentExpensesTable expenses={recentExpenses} showEmployee={false} />
@@ -218,7 +244,29 @@ function EmployeeDashboard({ summary, recentExpenses, loading, currency }: any) 
   );
 }
 
-function ManagerDashboard({ summary, categoryData, trendData, recentExpenses, loading, isBackupAccountant, onExportExcel, onExportPdf, exportingExcel, exportingPdf, currency }: any) {
+function ManagerDashboard({ 
+  summary, 
+  categoryData, 
+  trendData, 
+  recentExpenses, 
+  loading, 
+  isBackupAccountant, 
+  onExportExcel, 
+  onExportPdf, 
+  exportingExcel, 
+  exportingPdf, 
+  currency,
+  period,
+  setPeriod,
+  selectedStatus,
+  setSelectedStatus,
+  selectedCategory,
+  setSelectedCategory,
+  selectedEmployee,
+  setSelectedEmployee,
+  categories,
+  employees
+}: any) {
   return (
     <>
       <div className="mb-6 flex flex-wrap gap-3">
@@ -239,13 +287,28 @@ function ManagerDashboard({ summary, categoryData, trendData, recentExpenses, lo
         <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         <QuickActionLink href="/dashboard/users" label="👥 Mon équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
       </div>
+
+      <DashboardFilterBar
+        period={period}
+        setPeriod={setPeriod}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        selectedEmployee={selectedEmployee}
+        setSelectedEmployee={setSelectedEmployee}
+        categories={categories}
+        employees={employees}
+        showEmployeeFilter={true}
+      />
+
       {loading || !summary ? <LoadingSpinner /> : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600" />
-            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600" />
-            <KpiCard icon={<ChartIcon />} label="Taux d'approbation" value={`${summary.approval_rate}%`} color="bg-indigo-100 text-indigo-600" />
-            <KpiCard icon={<TotalIcon />} label="Total soumis" value={`${(summary.total_spent + summary.remaining_to_pay).toLocaleString()} ${currency}`} color="bg-gray-100 text-gray-600" />
+            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600 animate-fade-in" />
+            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600 animate-fade-in" />
+            <KpiCard icon={<ChartIcon />} label="Taux d'approbation" value={`${summary.approval_rate}%`} color="bg-indigo-100 text-indigo-600 animate-fade-in" />
+            <KpiCard icon={<TotalIcon />} label="Total soumis" value={`${(summary.total_spent + summary.remaining_to_pay).toLocaleString()} ${currency}`} color="bg-gray-100 text-gray-600 animate-fade-in" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <SectionCard title="Répartition par catégorie">
@@ -493,6 +556,7 @@ function AccountantDashboard({
           <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
           <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/fiscal-years" label="📅 Exercices" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -597,6 +661,7 @@ function AdminDashboard({
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/users" label="👥 Équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/company" label="🏢 Société" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/fiscal-years" label="📅 Exercices" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -786,6 +851,37 @@ export default function DashboardPage() {
 
 
 
+  // Load categories and employees on mount for filters
+  useEffect(() => {
+    if (!user) return;
+    // Always load categories for everyone
+    api.getCategories(true)
+      .then(res => setCategories(res as any[]))
+      .catch(err => console.error("Failed to load categories", err));
+
+    // Load employees for roles that can filter employees
+    if (["admin", "super_admin", "accountant", "manager"].includes(user.role) || user.is_backup_manager || user.is_backup_accountant) {
+      api.getUsers()
+        .then(res => setEmployees(res as any[]))
+        .catch(err => console.error("Failed to load users", err));
+    }
+  }, [user]);
+
+  // Construct dynamic filters query string (supports excluding status)
+  const getFilterQueryString = (excludeStatus = false) => {
+    let q = buildDateRange(period);
+    if (selectedStatus && !excludeStatus) {
+      q += `&status=${selectedStatus}`;
+    }
+    if (selectedCategory) {
+      q += `&category_id=${selectedCategory}`;
+    }
+    if (selectedEmployee) {
+      q += `&user_id=${selectedEmployee}`;
+    }
+    return q;
+  };
+
   useEffect(() => {
     if (!user) return;
     const load = async () => {
@@ -826,40 +922,23 @@ export default function DashboardPage() {
           }
         }
 
-  // Load categories and employees on mount for filters
-  useEffect(() => {
-    if (!user) return;
-    if (user.role === "admin" || user.role === "accountant" || user.role === "manager" || user.is_backup_manager || user.is_backup_accountant) {
-      api.getCategories(true).then(res => setCategories(res as any[])).catch(console.error);
-      api.getUsers().then(res => setEmployees(res as any[])).catch(console.error);
-    }
-  }, [user]);
-
-  // Construct dynamic filters query string
-  const getFilterQueryString = () => {
-    let q = buildDateRange(period);
-    if (selectedStatus) {
-      q += `&status=${selectedStatus}`;
-    }
-    if (selectedCategory) {
-      q += `&category_id=${selectedCategory}`;
-    }
-    if (selectedEmployee) {
-      q += `&user_id=${selectedEmployee}`;
-    }
-    return q;
-  };
-
         // If active, load standard dashboard statistics
-        const query = getFilterQueryString();
+        const queryWithStatus = getFilterQueryString(false);
+        const queryWithoutStatus = getFilterQueryString(true);
+
+        // Recent expenses query should also include category & user filters!
+        let recentQuery = queryWithStatus;
+        if (!selectedStatus && user.role === "accountant") {
+          recentQuery += "&status=approved";
+        }
+
         const calls: Promise<any>[] = [
-          api.getDashboardSummary(query),
-          // Comptable sees only approved expenses (to pay)
-          api.getDashboardRecentExpenses(user.role === "accountant" ? "approved" : undefined),
+          api.getDashboardSummary(queryWithoutStatus),
+          api.getDashboardRecentExpenses(recentQuery),
         ];
         if (needsCharts) {
-          calls.push(api.getDashboardByCategory(query));
-          calls.push(api.getDashboardMonthlyTrend(query));
+          calls.push(api.getDashboardByCategory(queryWithStatus));
+          calls.push(api.getDashboardMonthlyTrend(queryWithStatus));
         }
         const [sumRes, recentRes, catRes, trendRes] = await Promise.all(calls);
         setSummary(sumRes);

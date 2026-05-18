@@ -47,6 +47,7 @@ class ExpenseRequest(Base):
     expense_date = Column(Date, nullable=False)
     submitted_at = Column(DateTime, nullable=True)
     advance_id = Column(UUID(as_uuid=True), ForeignKey("advance_requests.id"), nullable=True)
+    fiscal_year_id = Column(UUID(as_uuid=True), ForeignKey("fiscal_years.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -55,6 +56,7 @@ class ExpenseRequest(Base):
     user = relationship("User")
     category_rel = relationship("ExpenseCategory")
     advance = relationship("AdvanceRequest", back_populates="expenses")
+    fiscal_year = relationship("FiscalYear", back_populates="expenses")
 
     @property
     def category(self):

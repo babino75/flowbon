@@ -310,8 +310,8 @@ export const api = {
     return fetchWithAuth(`/dashboard/monthly-trend${query ? `?${query}` : ""}`);
   },
 
-  getDashboardRecentExpenses: async (status?: string) => {
-    return fetchWithAuth(`/dashboard/recent-expenses${status ? `?status=${status}` : ""}`);
+  getDashboardRecentExpenses: async (query?: string) => {
+    return fetchWithAuth(`/dashboard/recent-expenses${query ? `?${query}` : ""}`);
   },
 
   exportExpensesExcel: async (query?: string) => {
@@ -662,6 +662,30 @@ export const api = {
   purgeCompany: async (companyId: string) => {
     return fetchWithAuth(`/super-admin/companies/${companyId}`, {
       method: "DELETE",
+    });
+  },
+
+  // ─── Exercices Comptables ─────────────────────────────────────────────────────
+
+  getFiscalYears: async () => {
+    return fetchWithAuth("/fiscal-years");
+  },
+
+  getActiveFiscalYear: async () => {
+    return fetchWithAuth("/fiscal-years/active");
+  },
+
+  createFiscalYear: async (data: { label: string; start_date: string; end_date: string }) => {
+    return fetchWithAuth("/fiscal-years", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  closeFiscalYear: async (fiscalYearId: string) => {
+    return fetchWithAuth(`/fiscal-years/${fiscalYearId}/close`, {
+      method: "POST",
     });
   },
 };
