@@ -11,6 +11,7 @@ from app.schemas.user import UserBase
 
 class ExpenseBase(BaseModel):
     amount: condecimal(max_digits=12, decimal_places=2)
+    tax_amount: Optional[condecimal(max_digits=12, decimal_places=2)] = Decimal("0.00")
     currency: str = Field(min_length=3, max_length=5)
     description: Optional[str] = None
     expense_date: date
@@ -24,6 +25,7 @@ class ExpenseCreateSchema(ExpenseBase):
 
 class ExpenseUpdateSchema(BaseModel):
     amount: Optional[condecimal(max_digits=12, decimal_places=2)] = None
+    tax_amount: Optional[condecimal(max_digits=12, decimal_places=2)] = None
     currency: Optional[str] = Field(default=None, min_length=3, max_length=5)
     category_id: Optional[UUID] = None
     description: Optional[str] = None

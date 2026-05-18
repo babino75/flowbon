@@ -273,6 +273,8 @@ export default function CompanyPage() {
                       <option value="XAF">Franc CFA d'Afrique Centrale (XAF)</option>
                       <option value="EUR">Euro (€)</option>
                       <option value="USD">Dollar Américain ($)</option>
+                      <option value="CAD">Dollar Canadien (CAD)</option>
+                      <option value="GBP">Livre Sterling (GBP)</option>
                     </select>
                   </label>
                 </div>

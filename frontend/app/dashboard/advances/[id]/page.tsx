@@ -183,13 +183,13 @@ export default function AdvanceDetailPage() {
 
             {/* Reconciliation message */}
             {advance.status === "disbursed" && (
-              <div className={`p-4 rounded-xl border text-sm flex gap-3 items-start ${balance > 0 ? "bg-amber-50 border-amber-100 text-amber-800" : balance < 0 ? "bg-red-50 border-red-100 text-red-800" : "bg-emerald-50 border-emerald-100 text-emerald-800"}`}>
-                <span className="text-xl">{balance > 0 ? "⚠️" : balance < 0 ? "💸" : "✅"}</span>
+              <div className={`p-4 rounded-xl border text-sm flex gap-3 items-start ${balance > 0 ? "bg-amber-50 border-amber-100 text-amber-800" : balance < 0 ? "bg-indigo-50 border-indigo-100 text-indigo-800" : "bg-emerald-50 border-emerald-100 text-emerald-800"}`}>
+                <span className="text-xl">{balance > 0 ? "⚠️" : balance < 0 ? "💵" : "✅"}</span>
                 <div>
-                  <h4 className="font-bold">{balance > 0 ? "Monnaie à restituer par l'employé" : balance < 0 ? "Remboursement de dépassement requis" : "Avance parfaitement équilibrée"}</h4>
+                  <h4 className="font-bold">{balance > 0 ? "Monnaie à restituer par l'employé" : balance < 0 ? "Remboursement dû à l'employé" : "Avance parfaitement équilibrée"}</h4>
                   <p className="text-xs mt-1 leading-relaxed">
                     {balance > 0 && `L'employé doit restituer physiquement ${balance.toLocaleString()} ${advance.currency} au comptable pour clore ce dossier.`}
-                    {balance < 0 && `L'entreprise doit rembourser le surplus de ${Math.abs(balance).toLocaleString()} ${advance.currency} à l'employé car les dépenses ont dépassé l'avance accordée.`}
+                    {balance < 0 && `L'employé a dépensé son propre argent pour finaliser la mission. Le comptable doit lui rembourser physiquement ${Math.abs(balance).toLocaleString()} ${advance.currency} pour clore ce dossier.`}
                     {balance === 0 && `Le montant cumulé des factures correspond exactement à l'avance de caisse octroyée. Aucun transfert de fonds supplémentaire n'est requis.`}
                   </p>
                 </div>

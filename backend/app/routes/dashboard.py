@@ -14,16 +14,24 @@ from app.services.tenant import (
     get_recent_expenses,
 )
 
+from uuid import UUID
+
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 def get_filters(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
+    category_id: Optional[UUID] = Query(None),
+    status: Optional[str] = Query(None),
+    user_id: Optional[UUID] = Query(None),
 ):
     return {
         "from_date": from_date,
         "to_date": to_date,
+        "category_id": category_id,
+        "status": status,
+        "user_id": user_id,
     }
 
 

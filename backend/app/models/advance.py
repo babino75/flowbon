@@ -28,6 +28,7 @@ class AdvanceRequest(Base):
     currency = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String, default=AdvanceStatus.draft.value, nullable=False)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id"), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -39,3 +40,4 @@ class AdvanceRequest(Base):
     user = relationship("User")
     company = relationship("Company")
     expenses = relationship("ExpenseRequest", back_populates="advance")
+    category_rel = relationship("ExpenseCategory")

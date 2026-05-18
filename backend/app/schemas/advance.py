@@ -12,6 +12,7 @@ class AdvanceBase(BaseModel):
     amount: condecimal(max_digits=12, decimal_places=2)
     currency: str = Field(min_length=3, max_length=5)
     description: Optional[str] = None
+    category_id: Optional[UUID] = None
 
 
 class AdvanceCreateSchema(AdvanceBase):
@@ -22,6 +23,7 @@ class AdvanceUpdateSchema(BaseModel):
     amount: Optional[condecimal(max_digits=12, decimal_places=2)] = None
     currency: Optional[str] = Field(default=None, min_length=3, max_length=5)
     description: Optional[str] = None
+    category_id: Optional[UUID] = None
 
 
 class AdvanceResponse(AdvanceBase):

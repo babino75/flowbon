@@ -10,6 +10,7 @@ const statuses = ["draft", "pending"];
 export default function NewExpensePage() {
   const [formData, setFormData] = useState({
     amount: "",
+    tax_amount: "",
     currency: "XOF",
     category_id: "",
     description: "",
@@ -22,6 +23,7 @@ export default function NewExpensePage() {
   
   const [loading, setLoading] = useState(false);
   const [catsLoading, setCatsLoading] = useState(true);
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
@@ -69,6 +71,18 @@ export default function NewExpensePage() {
     initPage();
   }, []);
 
+  useEffect(() => {
+    if (selectedAdvanceId && activeAdvances.length > 0) {
+      const adv = activeAdvances.find((a) => a.id === selectedAdvanceId);
+      if (adv && adv.category_id) {
+        setFormData((prev) => ({
+          ...prev,
+          category_id: adv.category_id,
+        }));
+      }
+    }
+  }, [selectedAdvanceId, activeAdvances]);
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -86,6 +100,7 @@ export default function NewExpensePage() {
     try {
       const data = {
         amount: Number(formData.amount),
+        tax_amount: Number(formData.tax_amount) || 0,
         currency: formData.currency,
         category_id: formData.category_id,
         description: formData.description,
@@ -94,6 +109,11 @@ export default function NewExpensePage() {
         advance_id: selectedAdvanceId || null,
       };
       const created = await api.createExpense(data) as any;
+      
+      if (files.length > 0 && created && created.id) {
+        await api.uploadAttachments(created.id, files);
+      }
+      
       setMessage("Bon de dépense créé.");
       
       if (selectedAdvanceId) {
@@ -139,7 +159,7 @@ export default function NewExpensePage() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid gap-6 sm:grid-cols-2">
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Montant</span>
+                <span className="text-sm font-medium text-slate-700">Montant Total (TTC)</span>
                 <input
                   type="number"
                   step="0.01"
@@ -165,6 +185,22 @@ export default function NewExpensePage() {
 
             <div className="grid gap-6 sm:grid-cols-2">
               <label className="block">
+                <span className="text-sm font-medium text-slate-700">Montant de la TVA (Facultatif)</span>
+                <input
+                  type="number"
+                  step="0.01;0.05"
+                  min="0"
+                  placeholder="Laisser vide si inconnu"
+                  value={formData.tax_amount}
+                  onChange={(e) => handleChange("tax_amount", e.target.value)}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                />
+              </label>
+              <div className="hidden sm:block"></div>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2">
+              <label className="block">
                 <span className="text-sm font-medium text-slate-700">Catégorie</span>
                 {catsLoading ? (
                   <div className="mt-2 text-slate-500 text-sm">Chargement des catégories...</div>
@@ -172,7 +208,8 @@ export default function NewExpensePage() {
                   <select
                     value={formData.category_id}
                     onChange={(e) => handleChange("category_id", e.target.value)}
-                    className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                    disabled={!!selectedAdvanceId}
+                    className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed text-sm"
                     required
                   >
                     {categories.map((cat) => (
@@ -220,6 +257,21 @@ export default function NewExpensePage() {
                 onChange={(e) => handleChange("description", e.target.value)}
                 className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
                 rows={4}
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Justificatifs (pdf, png, jpg)</span>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,image/png,image/jpeg,image/jpg"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    setFiles(Array.from(e.target.files));
+                  }
+                }}
+                className="mt-2 block w-full text-sm text-slate-500 file:mr-4 file:rounded-full file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-indigo-700"
               />
             </label>
 

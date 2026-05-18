@@ -21,6 +21,8 @@ services:
       - db
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
     environment:
       DATABASE_URL: postgresql://flowbon:flowbon123@db:5432/flowbon
       APP_NAME: FlowBon

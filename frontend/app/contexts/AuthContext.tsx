@@ -24,8 +24,10 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<{ user: User | null; loading: boolean }>({
+    user: null,
+    loading: true,
+  });
   const router = useRouter();
 
   useEffect(() => {
@@ -33,12 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       try {
         const userData = await api.getMe() as User;
-        setUser(userData);
+        setAuthState({ user: userData, loading: false });
       } catch {
         // Not logged in or token expired
-        setUser(null);
-      } finally {
-        setLoading(false);
+        setAuthState({ user: null, loading: false });
       }
     };
     initAuth();
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.login(data);
     setToken(res.access_token);
     const userData = await api.getMe() as User;
-    setUser(userData);
+    setAuthState({ user: userData, loading: false });
     router.push(redirectUrl || "/dashboard");
   };
 
@@ -64,14 +64,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error(e);
     } finally {
-      setUser(null);
+      setAuthState({ user: null, loading: false });
       setToken(null);
-      router.push("/login");
+      window.location.href = "/login";
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user: authState.user, loading: authState.loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -72,7 +72,8 @@ def create_advance(
         currency=currency,
         description=advance_in.description,
         status=advance_in.status,
-        submitted_at=submitted_at
+        submitted_at=submitted_at,
+        category_id=advance_in.category_id
     )
     db.add(advance)
     db.commit()
@@ -234,6 +235,13 @@ def reconcile_advance(
 
     advance.status = AdvanceStatus.reconciled.value
     advance.reconciled_at = datetime.utcnow()
+
+    # Automatically transition all non-rejected/non-cancelled linked expenses to 'paid'
+    from app.models.expense import ExpenseStatus
+    for exp in advance.expenses:
+        if exp.status not in [ExpenseStatus.rejected.value, ExpenseStatus.cancelled.value]:
+            exp.status = ExpenseStatus.paid.value
+
     db.commit()
     db.refresh(advance)
     

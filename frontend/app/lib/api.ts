@@ -392,6 +392,191 @@ export const api = {
     return api.exportExpensesExcel(query);
   },
 
+  exportPayrollExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/payroll/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/payroll/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Excel Paie");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payroll_reimbursements_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportPayrollPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/payroll/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/payroll/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export PDF Paie");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payroll_reimbursements_report_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportAdvancesPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/advances/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/advances/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export PDF Avances");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `advances_reconciliation_report_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportRejectedExpensesPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/rejections/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/rejections/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export PDF des rejets");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rejected_expenses_report_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportAttachmentsZip: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/attachments/zip${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/attachments/zip${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors du téléchargement du ZIP");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `flowbon_attachments_${new Date().toISOString().split("T")[0]}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
   getCategories: async (onlyActive?: boolean) => {
     return fetchWithAuth(`/categories${onlyActive ? "?only_active=true" : ""}`);
   },

@@ -22,6 +22,7 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
+  const [categories, setCategories] = useState<any[]>([]);
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -42,8 +43,20 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => {
-    fetchExpenses();
+    const fetchCats = async () => {
+      try {
+        const cats = await api.getCategories(true);
+        setCategories(cats as any[]);
+      } catch (err) {
+        console.error("Failed to load categories", err);
+      }
+    };
+    fetchCats();
   }, []);
+
+  useEffect(() => {
+    fetchExpenses();
+  }, [statusFilter, categoryFilter, fromDate, toDate]);
 
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -96,13 +109,18 @@ export default function ExpensesPage() {
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Catégorie</span>
-            <input
-              type="text"
+            <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              placeholder="Recherche"
-              className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-            />
+              className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
+            >
+              <option value="">Toutes</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="block">
@@ -166,7 +184,16 @@ export default function ExpensesPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.amount} {expense.currency}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.category}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span>{expense.category}</span>
+                          {expense.advance_id && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              💰 Avance
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 capitalize">{translateStatus(expense.status)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <Link

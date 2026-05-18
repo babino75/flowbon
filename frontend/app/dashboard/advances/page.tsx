@@ -30,11 +30,26 @@ export default function AdvancesPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [companyCurrency, setCompanyCurrency] = useState("XOF");
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportAdvancesPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const query = statusFilter ? `status=${statusFilter}` : "";
+      await api.exportAdvancesPdf(query);
+    } catch {
+      alert("Erreur lors de l'export du bilan des avances");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [categories, setCategories] = useState<any[]>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
@@ -63,6 +78,21 @@ export default function AdvancesPage() {
   };
 
   useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const cats = await api.getCategories(true) as any[];
+        setCategories(cats);
+        if (cats.length > 0) {
+          setCategoryId(cats[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to fetch categories", err);
+      }
+    };
+    fetchCats();
+  }, []);
+
+  useEffect(() => {
     fetchAdvances();
     fetchCompany();
   }, [statusFilter]);
@@ -84,6 +114,7 @@ export default function AdvancesPage() {
         currency: companyCurrency,
         description: description,
         status: status,
+        category_id: categoryId || null,
       });
 
       // Reset & Refresh
@@ -115,12 +146,23 @@ export default function AdvancesPage() {
               Gérez les demandes de fonds préalables et justifiez vos dépenses au centime près.
             </p>
           </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            ➕ Demander une avance
-          </button>
+          <div className="flex flex-wrap gap-3">
+            {user && (user.role === "admin" || user.role === "accountant") && (
+              <button
+                onClick={handleExportAdvancesPdf}
+                disabled={exportingPdf}
+                className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {exportingPdf ? "Bilan PDF..." : "📄 Exporter le Bilan"}
+              </button>
+            )}
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              ➕ Demander une avance
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -249,8 +291,22 @@ export default function AdvancesPage() {
                   placeholder="Ex: 50000"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 bg-white"
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-600">Catégorie de la dépense</label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 bg-white"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-slate-600">Description / Justification du besoin</label>
@@ -259,7 +315,7 @@ export default function AdvancesPage() {
                   placeholder="Ex: Frais de déplacement pour la mission à Cotonou..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 bg-white"
                 />
               </div>
             </div>

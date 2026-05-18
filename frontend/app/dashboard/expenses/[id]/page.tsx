@@ -9,7 +9,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 
 export default function ExpenseDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
-  const { user: authUser, loading: authLoading } = useAuth();
+  const { user: authUser } = useAuth();
   const [user, setUser] = useState<any>(null);
   const [expense, setExpense] = useState<any | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
@@ -20,6 +20,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const [message, setMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     amount: "",
+    tax_amount: "",
     currency: "",
     category_id: "",
     description: "",
@@ -35,12 +36,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   
   const router = useRouter();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !authUser) {
-      router.push(`/login?redirect=/dashboard/expenses/${params.id}`);
-    }
-  }, [authUser, authLoading, params.id, router]);
+
 
   const loadExpense = async () => {
     if (!authUser) return; // Prevent unnecessary loading if not logged in
@@ -59,6 +55,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
       setCategories(categoriesData as any[]);
       setFormData({
         amount: String((expenseData as any).amount ?? ""),
+        tax_amount: String((expenseData as any).tax_amount ?? "0.00"),
         currency: (expenseData as any).currency ?? "EUR",
         category_id: (expenseData as any).category_id ?? "",
         description: (expenseData as any).description ?? "",
@@ -93,6 +90,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     try {
       await api.updateExpense(params.id, {
         amount: Number(formData.amount),
+        tax_amount: Number(formData.tax_amount) || 0,
         currency: formData.currency,
         category_id: formData.category_id,
         description: formData.description,
@@ -247,7 +245,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
   const updatable = expense && (
     isAdmin ||
-    (isOwner && ["draft", "rejected"].includes(expense.status))
+    (isOwner && ["draft", "pending", "rejected"].includes(expense.status))
   );
   const canSubmit = expense && ["draft", "rejected"].includes(expense.status) && (isOwner || isAdmin);
   const canCancel = expense && expense.status === "pending" && (isOwner || isAdmin);
@@ -267,7 +265,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     }
   };
 
-  if (authLoading || (loading && !expense)) {
+  if (loading && !expense) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="animate-spin h-12 w-12 rounded-full border-b-2 border-indigo-600"></div>
@@ -358,12 +356,28 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
           {error && <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 mb-6">{error}</div>}
           {message && <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-700 mb-6">{message}</div>}
 
+          {expense.advance_id && (
+            <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 text-sm flex gap-3 items-center">
+              <span className="text-xl">💰</span>
+              <div>
+                <h4 className="font-bold">Justificatif lié à une avance de caisse</h4>
+                <p className="text-xs mt-0.5">Ce bon de dépense sert à justifier des fonds déjà avancés à l'employé. Aucun remboursement direct n'est requis.</p>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
               <h2 className="text-xl font-semibold text-slate-900 mb-4">Résumé</h2>
               <div className="space-y-3 text-sm text-slate-700">
                 <p><span className="font-semibold">Statut :</span> <span className="capitalize font-medium text-indigo-700 bg-indigo-100 px-2 py-1 rounded-md">{translateStatus(expense.status)}</span></p>
-                <p><span className="font-semibold">Montant :</span> {expense.amount} {expense.currency}</p>
+                <p><span className="font-semibold">Montant Total (TTC) :</span> {parseFloat(expense.amount).toLocaleString()} {expense.currency}</p>
+                {parseFloat(expense.tax_amount) > 0 && (
+                  <>
+                    <p><span className="font-semibold">Montant TVA :</span> {parseFloat(expense.tax_amount).toLocaleString()} {expense.currency}</p>
+                    <p><span className="font-semibold">Montant Hors Taxe (HT) :</span> {(parseFloat(expense.amount) - parseFloat(expense.tax_amount)).toLocaleString()} {expense.currency}</p>
+                  </>
+                )}
                 <p><span className="font-semibold">Catégorie :</span> {expense.category}</p>
                 <p><span className="font-semibold">Date :</span> {expense.expense_date}</p>
                 <p><span className="font-semibold">Soumis le :</span> {expense.submitted_at ? new Date(expense.submitted_at).toLocaleDateString() : "—"}</p>
@@ -373,13 +387,32 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
             <form className="space-y-6" onSubmit={handleSave}>
               <div className="grid gap-6 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Montant</span>
+                  <span className="text-sm font-medium text-slate-700">Montant Total (TTC)</span>
                   <input type="number" step="0.01" min="0" value={formData.amount} onChange={(e) => handleChange("amount", e.target.value)} disabled={!updatable} className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">Devise</span>
-                  <input type="text" value={formData.currency} onChange={(e) => handleChange("currency", e.target.value)} disabled={!updatable} className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100" />
+                  <select
+                    value={formData.currency}
+                    onChange={(e) => handleChange("currency", e.target.value)}
+                    disabled={!updatable}
+                    className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100"
+                  >
+                    <option value="XOF">XOF - Franc CFA (BCEAO)</option>
+                    <option value="XAF">XAF - Franc CFA (BEAC)</option>
+                    <option value="EUR">EUR - Euro (€)</option>
+                    <option value="USD">USD - Dollar US ($)</option>
+                    <option value="CAD">CAD - Dollar Canadien ($)</option>
+                    <option value="GBP">GBP - Livre Sterling (£)</option>
+                  </select>
                 </label>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Montant de la TVA (Facultatif)</span>
+                  <input type="number" step="0.01" min="0" value={formData.tax_amount} onChange={(e) => handleChange("tax_amount", e.target.value)} disabled={!updatable} className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100" />
+                </label>
+                <div className="hidden sm:block"></div>
               </div>
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Catégorie</span>

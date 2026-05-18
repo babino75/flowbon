@@ -39,6 +39,7 @@ class ExpenseRequest(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
+    tax_amount = Column(Numeric(12, 2), nullable=True, default=0.0)
     currency = Column(String, nullable=False)
     category_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id"), nullable=False)
     description = Column(Text, nullable=True)

@@ -102,6 +102,13 @@ def _apply_dashboard_filters(query, current_user: User, filters: dict):
         query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
     if filters.get("to_date"):
         query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
+        
+    if filters.get("category_id"):
+        query = query.filter(ExpenseRequest.category_id == filters["category_id"])
+    if filters.get("status"):
+        query = query.filter(ExpenseRequest.status == filters["status"])
+    if filters.get("user_id"):
+        query = query.filter(ExpenseRequest.user_id == filters["user_id"])
     
     return query
 
@@ -146,6 +153,7 @@ def get_expenses_by_category(db: Session, current_user: User, filters: dict):
         ExpenseCategory.name.label("category"),
         func.sum(ExpenseRequest.amount).label("total")
     ).join(ExpenseRequest.category_rel)
+    query = query.filter(ExpenseRequest.status.in_(["approved", "paid"]))
     query = _apply_dashboard_filters(query, current_user, filters)
     results = query.group_by(ExpenseCategory.name).all()
     return [{"category": r.category, "total": float(r.total or 0)} for r in results]

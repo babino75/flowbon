@@ -63,6 +63,7 @@ def create_expense(
         status=expense_in.status,
         expense_date=expense_in.expense_date,
         submitted_at=submitted_at,
+        advance_id=expense_in.advance_id,
     )
     db.add(expense)
     db.commit()
@@ -147,8 +148,8 @@ def update_expense(
     if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    # Non-admins can only update draft or pending requests
-    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+    # Non-admins can only update draft, pending, or rejected requests
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value, ExpenseStatus.rejected.value}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon ne peut plus être modifié")
 
     for field, value in expense_update.model_dump(exclude_unset=True).items():
@@ -266,8 +267,8 @@ def upload_attachments(
     if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    # Non-admins cannot upload attachments on approved or paid expenses
-    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+    # Non-admins cannot upload attachments on approved or paid expenses (only draft, pending, or rejected)
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value, ExpenseStatus.rejected.value}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible d'ajouter des justificatifs à un bon validé")
 
     existing_attachments = db.query(Attachment).filter(Attachment.expense_request_id == expense.id).count()
@@ -316,8 +317,8 @@ def delete_attachment(
     if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    # Non-admins cannot delete attachments on approved or paid expenses
-    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+    # Non-admins cannot delete attachments on approved or paid expenses (only draft, pending, or rejected)
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value, ExpenseStatus.rejected.value}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de supprimer un justificatif d'un bon validé")
 
     attachment = get_attachment_for_expense(db, attachment_id, expense)

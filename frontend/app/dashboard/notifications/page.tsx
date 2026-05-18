@@ -32,7 +32,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function NotificationsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +42,7 @@ export default function NotificationsPage() {
   const [prefsMsg, setPrefsMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"list" | "prefs">("list");
 
-  useEffect(() => {
-    if (!authLoading && !user) router.push("/login");
-  }, [user, authLoading, router]);
+
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -115,12 +113,8 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter((n) => !n.read_at).length;
 
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
-      </div>
-    );
+  if (!user) {
+    return null;
   }
 
   return (
