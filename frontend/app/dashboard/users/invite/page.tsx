@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "../../../contexts/AuthContext";
 import { api } from "../../../lib/api";
 
@@ -90,6 +91,13 @@ export default function InviteUserPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
+        {/* Breadcrumb */}
+        <div className="mb-6 flex items-center gap-2">
+          <Link href="/dashboard/users" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            ← Retour à la liste des utilisateurs
+          </Link>
+        </div>
+
         <div className="mb-8 rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
           <h1 className="text-3xl font-bold text-slate-900">Inviter ou créer un utilisateur</h1>
           <p className="mt-2 text-slate-600">Envoyez une invitation par email ou créez directement un compte pour un membre de votre équipe.</p>

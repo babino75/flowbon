@@ -60,3 +60,36 @@ def update_my_company(
     db.commit()
     db.refresh(company)
     return company
+
+
+@router.post("/activate-trial", response_model=CompanyResponse)
+def activate_company_trial(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Activer la période d'essai de 7 jours pour une entreprise en attente d'abonnement."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seul l'administrateur de l'entreprise peut activer la période d'essai.",
+        )
+    if current_user.company_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise non trouvée")
+
+    company = db.query(Company).filter(Company.id == current_user.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise non trouvée")
+
+    if company.subscription_status != "pending_selection":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La période d'essai ne peut être activée que pour les nouveaux comptes en attente d'abonnement.",
+        )
+
+    from datetime import datetime, timedelta
+    company.subscription_plan = "free"
+    company.subscription_status = "trial"
+    company.trial_expires_at = datetime.utcnow() + timedelta(days=7)
+    db.commit()
+    db.refresh(company)
+    return company

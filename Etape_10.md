@@ -270,7 +270,10 @@ Apres cette etape, FlowBon est un MVP solide, securise et vendable. La suite con
 Prochaines grandes ameliorations possibles :
 
 ```text
-Phase 2 - Fonctionnalites avancees
+Phase 2 - Fonctionnalites avancees et architecture
+ - Support multi-entreprises par compte unique (Membership Many-to-Many) :
+   Permettre à un utilisateur (ex: comptable, consultant, freelance) de se connecter avec une adresse e-mail unique (qui reste globale et unique en base) et de basculer facilement entre plusieurs espaces de travail (entreprises distinctes), sans devoir se déconnecter.
+   *Astuce de test V1 / Workaround* : Utiliser le sub-addressing d'e-mail (alias `+` dans Gmail, ex: `tcharesamoudine+babino@gmail.com`).
  - OCR factures (lecture automatique des montants)
  - export PDF des rapports
  - analytics avancees (comparaison mois par mois)

@@ -24,8 +24,15 @@ services:
     environment:
       DATABASE_URL: postgresql://flowbon:flowbon123@db:5432/flowbon
       APP_NAME: FlowBon
-      APP_ENV: local
+      APP_ENV: local # Reste en local pour utiliser le canal SMTP
       FRONTEND_URL: http://localhost:3000
+      
+      # Configuration SMTP de GMAIL :
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: bawatcharesamoudine@gmail.com
+      SMTP_PASSWORD: lwyg biuu tqvi yzhk
+
 
   frontend:
     build:
@@ -39,5 +46,14 @@ services:
     environment:
       - INTERNAL_API_URL=http://backend:8000
 
+  maildev:
+    image: maildev/maildev
+    container_name: flowbon-maildev
+    restart: always
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+
 volumes:
   pgdata:
+

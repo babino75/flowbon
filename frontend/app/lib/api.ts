@@ -114,6 +114,12 @@ export const api = {
     return response;
   },
 
+  activateTrial: async () => {
+    return fetchWithAuth("/companies/activate-trial", {
+      method: "POST",
+    });
+  },
+
   getExpenses: async (params: Record<string, string | number | undefined> = {}) => {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -179,6 +185,53 @@ export const api = {
     });
   },
 
+  getAdvances: async (params: Record<string, string | undefined> = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        searchParams.set(key, String(value));
+      }
+    });
+    const query = searchParams.toString();
+    return fetchWithAuth(`/advances${query ? `?${query}` : ""}`);
+  },
+
+  getAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}`);
+  },
+
+  createAdvance: async (data: Record<string, unknown>) => {
+    return fetchWithAuth("/advances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  approveAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}/approve`, {
+      method: "POST",
+    });
+  },
+
+  disburseAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}/disburse`, {
+      method: "POST",
+    });
+  },
+
+  rejectAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}/reject`, {
+      method: "POST",
+    });
+  },
+
+  reconcileAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}/reconcile`, {
+      method: "POST",
+    });
+  },
+
   getUsers: async () => {
     return fetchWithAuth("/users");
   },
@@ -216,4 +269,216 @@ export const api = {
   deactivateUser: async (userId: string) => {
     return fetchWithAuth(`/users/${userId}/deactivate`, { method: "PATCH" });
   },
+
+  approveExpense: async (expenseId: string) => {
+    return fetchWithAuth(`/expenses/${expenseId}/approve`, { method: "POST" });
+  },
+
+  rejectExpense: async (expenseId: string, data: { comment: string }) => {
+    return fetchWithAuth(`/expenses/${expenseId}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  payExpense: async (expenseId: string) => {
+    return fetchWithAuth(`/expenses/${expenseId}/mark-as-paid`, { method: "POST" });
+  },
+
+  addExpenseComment: async (expenseId: string, data: { comment: string }) => {
+    return fetchWithAuth(`/expenses/${expenseId}/comment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  getExpenseLogs: async (expenseId: string) => {
+    return fetchWithAuth(`/expenses/${expenseId}/logs`);
+  },
+
+  getDashboardSummary: async (query?: string) => {
+    return fetchWithAuth(`/dashboard/summary${query ? `?${query}` : ""}`);
+  },
+
+  getDashboardByCategory: async (query?: string) => {
+    return fetchWithAuth(`/dashboard/by-category${query ? `?${query}` : ""}`);
+  },
+
+  getDashboardMonthlyTrend: async (query?: string) => {
+    return fetchWithAuth(`/dashboard/monthly-trend${query ? `?${query}` : ""}`);
+  },
+
+  getDashboardRecentExpenses: async (status?: string) => {
+    return fetchWithAuth(`/dashboard/recent-expenses${status ? `?status=${status}` : ""}`);
+  },
+
+  exportExpensesExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/expenses/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/expenses/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `expenses_export_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportExpensesPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/expenses/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/expenses/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `expenses_report_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportExpensesCsv: async (query?: string) => {
+    return api.exportExpensesExcel(query);
+  },
+
+  getCategories: async (onlyActive?: boolean) => {
+    return fetchWithAuth(`/categories${onlyActive ? "?only_active=true" : ""}`);
+  },
+
+  addCategory: async (data: { name: string; code?: string }) => {
+    return fetchWithAuth("/categories", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCategory: async (id: string, data: { name?: string; code?: string; is_active?: boolean }) => {
+    return fetchWithAuth(`/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // ─── Notifications ───────────────────────────────────────────────────────────
+  getNotifications: async (page = 1, limit = 20) => {
+    return fetchWithAuth(`/notifications?page=${page}&limit=${limit}`);
+  },
+
+  getUnreadCount: async () => {
+    return fetchWithAuth("/notifications/unread-count");
+  },
+
+  markNotificationRead: async (id: string) => {
+    return fetchWithAuth(`/notifications/${id}/read`, { method: "POST" });
+  },
+
+  markAllNotificationsRead: async () => {
+    return fetchWithAuth("/notifications/read-all", { method: "POST" });
+  },
+
+  getNotifPreferences: async () => {
+    return fetchWithAuth("/notifications/preferences");
+  },
+
+  updateNotifPreferences: async (data: {
+    notify_in_app?: boolean;
+    notify_email?: boolean;
+    notify_on_created?: boolean;
+    notify_on_approved?: boolean;
+    notify_on_rejected?: boolean;
+    notify_on_paid?: boolean;
+  }) => {
+    return fetchWithAuth("/notifications/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // ─── Super Admin ─────────────────────────────────────────────────────────────
+
+  getSuperAdminStats: async () => {
+    return fetchWithAuth("/super-admin/stats");
+  },
+
+  getSuperAdminCompanies: async () => {
+    return fetchWithAuth("/super-admin/companies");
+  },
+
+  updateCompanySubscription: async (
+    companyId: string,
+    data: { subscription_plan?: string; subscription_status?: string; max_users?: number }
+  ) => {
+    return fetchWithAuth(`/super-admin/companies/${companyId}/subscription`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  impersonateCompany: async (companyId: string) => {
+    return fetchWithAuth(`/super-admin/impersonate/${companyId}`, { method: "POST" });
+  },
+
+  getSuperAdminAuditLogs: async () => {
+    return fetchWithAuth("/super-admin/audit-logs");
+  },
+
+  purgeCompany: async (companyId: string) => {
+    return fetchWithAuth(`/super-admin/companies/${companyId}`, {
+      method: "DELETE",
+    });
+  },
 };
+
+

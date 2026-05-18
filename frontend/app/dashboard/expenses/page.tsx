@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "../../lib/api";
+import { translateStatus } from "../../lib/utils";
 
 const statusOptions = [
   "draft",
@@ -47,6 +48,13 @@ export default function ExpensesPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
+        {/* Breadcrumb */}
+        <div className="mb-6 flex items-center gap-2">
+          <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            ← Retour au Tableau de bord
+          </Link>
+        </div>
+
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Dépenses</h1>
@@ -80,7 +88,7 @@ export default function ExpensesPage() {
               <option value="">Tous</option>
               {statusOptions.map((status) => (
                 <option key={status} value={status}>
-                  {status}
+                  {translateStatus(status)}
                 </option>
               ))}
             </select>
@@ -132,6 +140,7 @@ export default function ExpensesPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Employé</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Catégorie</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
@@ -149,9 +158,16 @@ export default function ExpensesPage() {
                   expenses.map((expense) => (
                     <tr key={expense.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.expense_date}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                        {expense.user ? (
+                          <span title={expense.user.email}>{expense.user.name}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.amount} {expense.currency}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.category}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 capitalize">{expense.status}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 capitalize">{translateStatus(expense.status)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <Link
                           href={`/dashboard/expenses/${expense.id}`}

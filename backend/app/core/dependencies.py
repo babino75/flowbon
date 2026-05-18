@@ -1,12 +1,14 @@
+from datetime import datetime
 from typing import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.models.company import Company
 from app.models.user import User
 
 
@@ -47,8 +49,56 @@ def get_current_user(
 
 
 def get_current_active_user(
+    request: Request,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    # Bypass subscription restriction checks for:
+    # 1. Super Admins
+    if current_user.role == "super_admin":
+        return current_user
+
+    # 2. Specific routes: /auth/me, /companies/me, /auth/logout, /companies/activate-trial
+    path = request.url.path
+    normalized_path = path.rstrip("/")
+    if normalized_path in [
+        "/auth/me",
+        "/companies/me",
+        "/auth/logout",
+        "/companies/activate-trial",
+        "/api/auth/me",
+        "/api/companies/me",
+        "/api/auth/logout",
+        "/api/companies/activate-trial",
+    ]:
+        return current_user
+
+    if current_user.company_id:
+        company = db.query(Company).filter(Company.id == current_user.company_id).first()
+        if company:
+            # 1. Selection pending onboarding
+            if company.subscription_status == "pending_selection":
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="pending_selection",
+                )
+            
+            # 2. Subscription suspended
+            if company.subscription_status == "suspended":
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="subscription_suspended",
+                )
+
+            # 3. Trial expired
+            if company.subscription_status == "trial":
+                if company.trial_expires_at and company.trial_expires_at < datetime.utcnow():
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail="trial_expired",
+                    )
+
     return current_user

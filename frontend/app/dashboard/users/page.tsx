@@ -11,6 +11,8 @@ type User = {
   email: string;
   role: string;
   is_active: boolean;
+  is_backup_manager: boolean;
+  is_backup_accountant: boolean;
 };
 
 const roles = ["employee", "manager", "accountant", "admin"];
@@ -58,6 +60,32 @@ export default function UsersPage() {
     }
   };
 
+  const toggleBackupManager = async (userRow: User) => {
+    try {
+      await api.updateUserRole(userRow.id, {
+        role: userRow.role,
+        is_backup_manager: !userRow.is_backup_manager,
+      });
+      setActionMessage(`Droits de Manager suppléant pour ${userRow.name} mis à jour.`);
+      await refreshUsers();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Impossible de mettre à jour les droits.");
+    }
+  };
+
+  const toggleBackupAccountant = async (userRow: User) => {
+    try {
+      await api.updateUserRole(userRow.id, {
+        role: userRow.role,
+        is_backup_accountant: !userRow.is_backup_accountant,
+      });
+      setActionMessage(`Droits de Comptable suppléant pour ${userRow.name} mis à jour.`);
+      await refreshUsers();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Impossible de mettre à jour les droits.");
+    }
+  };
+
   const toggleActive = async (userId: string, isActive: boolean) => {
     try {
       if (isActive) {
@@ -95,6 +123,13 @@ export default function UsersPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
+        {/* Breadcrumb */}
+        <div className="mb-6 flex items-center gap-2">
+          <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            ← Retour au Tableau de bord
+          </Link>
+        </div>
+
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Utilisateurs</h1>
@@ -125,6 +160,7 @@ export default function UsersPage() {
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Nom</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Email</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rôle</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Droits Suppléants</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
                 </tr>
@@ -155,6 +191,34 @@ export default function UsersPage() {
                           Mettre à jour
                         </button>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {userRow.role === "admin" || userRow.role === "super_admin" ? (
+                        <span className="text-xs text-slate-400 italic">Tous les droits (Admin)</span>
+                      ) : userRow.role === "employee" ? (
+                        <span className="text-xs text-slate-400 italic">Aucun droit suppléant (Employé)</span>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={userRow.is_backup_manager}
+                              onChange={() => toggleBackupManager(userRow)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Manager suppléant</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={userRow.is_backup_accountant}
+                              onChange={() => toggleBackupAccountant(userRow)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Comptable suppléant</span>
+                          </label>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <span className={`inline-flex rounded-full px-3 py-1 font-medium ${userRow.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>

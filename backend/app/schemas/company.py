@@ -12,6 +12,7 @@ class CompanyBase(BaseModel):
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
     max_users: Optional[int] = None
+    currency: Optional[str] = "XOF"
 
 
 class CompanyCreateSchema(CompanyBase):
@@ -27,12 +28,14 @@ class CompanyUpdateSchema(BaseModel):
     subscription_plan: Optional[str] = None
     subscription_status: Optional[str] = None
     max_users: Optional[int] = None
+    currency: Optional[str] = None
 
 
 class CompanyResponse(CompanyBase):
     id: UUID
     subscription_plan: str
     subscription_status: str
+    trial_expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

@@ -16,10 +16,20 @@ from app.core.security import (
 )
 from app.models.company import Company
 from app.models.invitation import Invitation
-from app.models.token import RefreshToken
+from app.models.token import RefreshToken, PasswordResetToken
 from app.models.user import User
-from app.schemas.auth import LoginSchema, RegisterSchema, RegisterInviteSchema, TokenResponse
+from app.schemas.auth import (
+    LoginSchema,
+    RegisterSchema,
+    RegisterInviteSchema,
+    TokenResponse,
+    ForgotPasswordSchema,
+    ResetPasswordSchema,
+)
 from app.schemas.user import UserResponse
+
+from app.services.tenant import seed_default_categories
+from app.services.notification_service import send_password_reset_email
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -37,11 +47,12 @@ def register(request: Request, user_in: RegisterSchema, db: Session = Depends(ge
 
     company_id = None
     if user_in.role == "admin":
-        company = Company(name=user_in.company_name, email=user_in.email)
+        company = Company(name=user_in.company_name, email=user_in.email, subscription_status="pending_selection")
         db.add(company)
         db.commit()
         db.refresh(company)
         company_id = company.id
+        seed_default_categories(db, company_id)
 
     user = User(
         name=user_in.name,
@@ -158,3 +169,64 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(request: Request, data: ForgotPasswordSchema, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    if user:
+        # Expire old tokens
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used == False
+        ).update({"used": True})
+        db.commit()
+        
+        # Create new token
+        token = str(uuid.uuid4())
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        db_token = PasswordResetToken(
+            user_id=user.id,
+            token=token,
+            expires_at=expires_at,
+        )
+        db.add(db_token)
+        db.commit()
+        
+        # Send email
+        send_password_reset_email(user.email, token)
+        
+    # Always return success message for security (prevent email discovery)
+    return {"message": "Si cette adresse email existe dans notre base de données, un lien de réinitialisation vient de vous être envoyé."}
+
+
+@router.post("/reset-password")
+@limiter.limit("5/minute")
+def reset_password(request: Request, data: ResetPasswordSchema, db: Session = Depends(get_db)):
+    db_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == data.token,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le lien de réinitialisation est invalide, expiré ou a déjà été utilisé."
+        )
+        
+    user = db.query(User).filter(User.id == db_token.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé."
+        )
+        
+    # Update password
+    user.password_hash = hash_password(data.new_password)
+    db_token.used = True
+    db.commit()
+    
+    return {"message": "Votre mot de passe a été réinitialisé avec succès."}
+

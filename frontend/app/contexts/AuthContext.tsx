@@ -9,12 +9,14 @@ type User = {
   name: string;
   email: string;
   role: string;
+  is_backup_manager: boolean;
+  is_backup_accountant: boolean;
 };
 
 type AuthContextType = {
   user: User | null;
   loading: boolean;
-  login: (data: Record<string, unknown>) => Promise<void>;
+  login: (data: Record<string, unknown>, redirectUrl?: string) => Promise<void>;
   register: (data: Record<string, unknown>) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -42,12 +44,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
-  const login = async (data: Record<string, unknown>) => {
+  const login = async (data: Record<string, unknown>, redirectUrl?: string) => {
     const res = await api.login(data);
     setToken(res.access_token);
     const userData = await api.getMe() as User;
     setUser(userData);
-    router.push("/dashboard");
+    router.push(redirectUrl || "/dashboard");
   };
 
   const register = async (data: Record<string, unknown>) => {

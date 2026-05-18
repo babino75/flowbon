@@ -7,6 +7,12 @@ from app.config import settings
 from app.routes import auth, company, invitation, user
 from app.routes.auth import limiter
 from app.routes.expenses import router as expenses_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.exports import router as exports_router
+from app.routes.categories import router as categories_router
+from app.routes.notifications import router as notifications_router
+from app.routes.advances import router as advances_router
+from app.routes.super_admin import router as super_admin_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -30,6 +36,21 @@ app.include_router(company.router)
 app.include_router(user.router)
 app.include_router(invitation.router)
 app.include_router(expenses_router)
+app.include_router(dashboard_router)
+app.include_router(exports_router)
+app.include_router(categories_router)
+app.include_router(notifications_router)
+app.include_router(advances_router)
+app.include_router(super_admin_router)
+
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+# Ensure the upload directory exists
+upload_dir_path = Path(settings.uploads_dir)
+upload_dir_path.mkdir(parents=True, exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
 
 
 @app.get("/")

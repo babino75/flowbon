@@ -1,24 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      await login({ email, password });
-      // The context's login method handles the redirect to /dashboard
+      await login({ email, password }, redirect);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || "Email ou mot de passe incorrect");
@@ -111,5 +113,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">Chargement...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

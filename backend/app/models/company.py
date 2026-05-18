@@ -20,8 +20,10 @@ class Company(Base):
     
     # Subscription management (SaaS mode vs Self-hosted)
     subscription_plan = Column(String, default="free", nullable=False)
-    subscription_status = Column(String, default="active", nullable=False)
+    subscription_status = Column(String, default="pending_selection", nullable=False)
     max_users = Column(Integer, default=10, nullable=False)
+    currency = Column(String, default="XOF", nullable=False)
+    trial_expires_at = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(

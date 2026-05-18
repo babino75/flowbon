@@ -19,6 +19,8 @@ class User(Base):
     role = Column(String, default="employee", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    is_backup_manager = Column(Boolean, default=False, nullable=False)
+    is_backup_accountant = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(

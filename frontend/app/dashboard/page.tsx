@@ -1,150 +1,903 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { useAuth } from "../contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../contexts/AuthContext";
+import { api, setToken } from "../lib/api";
+import { CategoryPieChart, MonthlyTrendBarChart } from "./components/DashboardCharts";
+import { translateStatus } from "../lib/utils";
 
-export default function DashboardPage() {
-  const { user, loading, logout } = useAuth();
-  const router = useRouter();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildDateRange(period: string) {
+  const now = new Date();
+  let fromDate = "", toDate = "";
+  if (period === "month") {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  } else if (period === "quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    fromDate = new Date(now.getFullYear(), q * 3, 1).toISOString().split("T")[0];
+    toDate = new Date(now.getFullYear(), q * 3 + 3, 0).toISOString().split("T")[0];
+  } else if (period === "year") {
+    fromDate = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
+    toDate = new Date(now.getFullYear(), 11, 31).toISOString().split("T")[0];
+  }
+  return fromDate && toDate ? `from_date=${fromDate}&to_date=${toDate}` : "";
+}
+
+function KpiCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
+  return (
+    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100">
+      <div className="p-5 flex items-center">
+        <div className={`flex-shrink-0 ${color} rounded-md p-3`}>{icon}</div>
+        <div className="ml-5 w-0 flex-1">
+          <p className="text-sm font-medium text-gray-500 truncate">{label}</p>
+          <p className="text-xl font-bold text-gray-900 mt-1 truncate">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickActionLink({ href, label, color }: { href: string; label: string; color: string }) {
+  return (
+    <Link href={href} className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${color}`}>
+      {label}
+    </Link>
+  );
+}
+
+function RecentExpensesTable({ expenses, showEmployee }: { expenses: any[]; showEmployee: boolean }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+            {showEmployee && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employé</th>}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+            <th className="relative px-6 py-3"><span className="sr-only">Voir</span></th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {expenses.length === 0 ? (
+            <tr><td colSpan={showEmployee ? 6 : 5} className="px-6 py-8 text-center text-sm text-gray-500">Aucun bon récent.</td></tr>
+          ) : expenses.map((e) => (
+            <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{e.expense_date}</td>
+              {showEmployee && (
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {e.user ? <span title={e.user.email}>{e.user.name}</span> : <span className="italic text-gray-400">—</span>}
+                </td>
+              )}
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{e.amount} {e.currency}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.category}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  e.status === "paid" ? "bg-green-100 text-green-800" :
+                  e.status === "approved" ? "bg-blue-100 text-blue-800" :
+                  e.status === "pending" ? "bg-yellow-100 text-yellow-800" :
+                  e.status === "rejected" ? "bg-red-100 text-red-800" :
+                  e.status === "cancelled" ? "bg-gray-100 text-gray-500" :
+                  "bg-slate-100 text-slate-600"
+                }`}>{translateStatus(e.status)}</span>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <Link href={`/dashboard/expenses/${e.id}`} className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1 rounded-full text-xs font-semibold">Voir</Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TrialCountdownBanner({ trialExpiresAt }: { trialExpiresAt: string }) {
+  const [timeLeft, setTimeLeft] = useState("");
+  const [progressPercent, setProgressPercent] = useState(100);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
-  }, [user, loading, router]);
+    const calculateTime = () => {
+      const expiration = new Date(trialExpiresAt).getTime();
+      const now = new Date().getTime();
+      const difference = expiration - now;
 
-  if (loading || !user) {
+      if (difference <= 0) {
+        setTimeLeft("Expiré");
+        setProgressPercent(0);
+        return;
+      }
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+
+      // Calculate progress percentage assuming 7 days total (7 * 24 * 60 * 60 * 1000 ms)
+      const totalTrialMs = 7 * 24 * 60 * 60 * 1000;
+      const percent = Math.min(100, Math.max(0, (difference / totalTrialMs) * 100));
+      setProgressPercent(percent);
+
+      if (days > 0) {
+        setTimeLeft(`${days} jour${days > 1 ? "s" : ""} et ${hours} heure${hours > 1 ? "s" : ""}`);
+      } else {
+        setTimeLeft(`${hours} heure${hours > 1 ? "s" : ""} et ${minutes} minute${minutes > 1 ? "s" : ""}`);
+      }
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 60000);
+    return () => clearInterval(interval);
+  }, [trialExpiresAt]);
+
+  const isLowTime = progressPercent < 30; // Moins de 2 jours restants
+
+  return (
+    <div className="max-w-7xl mx-auto mt-6 px-4 sm:px-6 lg:px-8">
+      <div className={`relative overflow-hidden rounded-2xl border backdrop-blur-md shadow-lg p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-300 ${
+        isLowTime 
+          ? "bg-gradient-to-r from-red-500/10 via-amber-500/10 to-red-500/10 border-red-500/30 text-red-900" 
+          : "bg-gradient-to-r from-indigo-500/10 via-violet-500/10 to-indigo-500/10 border-indigo-500/30 text-indigo-900"
+      }`}>
+        {/* Glow effect */}
+        <div className={`absolute -right-10 -bottom-10 w-40 h-40 rounded-full blur-3xl opacity-20 ${isLowTime ? "bg-red-500" : "bg-indigo-500"}`}></div>
+
+        <div className="flex items-center gap-4 z-10 w-full sm:w-auto">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-sm ${
+            isLowTime ? "bg-red-500 text-white animate-pulse" : "bg-indigo-600 text-white"
+          }`}>
+            ⏳
+          </div>
+          <div className="flex-1">
+            <h4 className="font-bold text-base leading-tight">
+              {isLowTime ? "🚨 Votre période d'essai prend fin très bientôt !" : "🚀 Période d'essai gratuite active"}
+            </h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Il vous reste <span className="font-semibold text-indigo-600 underline decoration-indigo-300 decoration-2">{timeLeft}</span> pour tester toutes les fonctionnalités de FlowBon.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 z-10 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Circular/Linear visual indicator */}
+          <div className="hidden md:flex flex-col items-end gap-1">
+            <div className="w-32 bg-gray-200 h-2 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-1000 ${isLowTime ? "bg-red-500" : "bg-indigo-600"}`} 
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+            <span className="text-[10px] font-semibold text-gray-500">Progression de l'essai</span>
+          </div>
+
+          <Link
+            href="/dashboard/subscription-select"
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap ${
+              isLowTime
+                ? "bg-red-600 hover:bg-red-700 text-white"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+            }`}
+          >
+            Choisir mon forfait 💳
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Role-specific dashboard sections ─────────────────────────────────────────
+
+function EmployeeDashboard({ summary, recentExpenses, loading, currency }: any) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
+        <QuickActionLink href="/dashboard/expenses" label="📋 Tous mes bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+      </div>
+      {loading || !summary ? <LoadingSpinner /> : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600" />
+            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600" />
+            <KpiCard icon={<MoneyIcon />} label="Payés" value={String(summary.paid_count)} color="bg-green-100 text-green-600" />
+            <KpiCard icon={<TotalIcon />} label="Total remboursé" value={`${summary.total_spent.toLocaleString()} ${currency}`} color="bg-indigo-100 text-indigo-600" />
+          </div>
+          <SectionCard title="Mes derniers bons" linkHref="/dashboard/expenses" linkLabel="Voir tout">
+            <RecentExpensesTable expenses={recentExpenses} showEmployee={false} />
+          </SectionCard>
+        </>
+      )}
+    </>
+  );
+}
+
+function ManagerDashboard({ summary, categoryData, trendData, recentExpenses, loading, isBackupAccountant, onExportExcel, onExportPdf, exportingExcel, exportingPdf, currency }: any) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
+        <QuickActionLink href="/dashboard/expenses?status=pending" label="✅ Bons à valider" color="bg-yellow-500 text-white hover:bg-yellow-600" />
+        {isBackupAccountant && (
+          <>
+            <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
+            <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+              {exportingExcel ? "Export Excel..." : "⬇ Exporter Excel"}
+            </button>
+            <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
+              {exportingPdf ? "Génération PDF..." : "📄 Rapport PDF"}
+            </button>
+          </>
+        )}
+        <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/users" label="👥 Mon équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+      </div>
+      {loading || !summary ? <LoadingSpinner /> : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600" />
+            <KpiCard icon={<CheckIcon />} label="Approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600" />
+            <KpiCard icon={<ChartIcon />} label="Taux d'approbation" value={`${summary.approval_rate}%`} color="bg-indigo-100 text-indigo-600" />
+            <KpiCard icon={<TotalIcon />} label="Total soumis" value={`${(summary.total_spent + summary.remaining_to_pay).toLocaleString()} ${currency}`} color="bg-gray-100 text-gray-600" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <SectionCard title="Répartition par catégorie">
+              <div className="p-4"><CategoryPieChart data={categoryData} /></div>
+            </SectionCard>
+            <SectionCard title="Évolution mensuelle">
+              <div className="p-4"><MonthlyTrendBarChart data={trendData} /></div>
+            </SectionCard>
+          </div>
+          <SectionCard title="Derniers bons de l'équipe" linkHref="/dashboard/expenses" linkLabel="Voir tout">
+            <RecentExpensesTable expenses={recentExpenses} showEmployee={true} />
+          </SectionCard>
+        </>
+      )}
+    </>
+  );
+}
+
+function AccountantDashboard({ summary, categoryData, trendData, recentExpenses, loading, onExportExcel, onExportPdf, exportingExcel, exportingPdf, isBackupManager, currency }: any) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
+        {isBackupManager && (
+          <QuickActionLink href="/dashboard/expenses?status=pending" label="✅ Bons à valider" color="bg-yellow-500 text-white hover:bg-yellow-600" />
+        )}
+        <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
+        <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+          {exportingExcel ? "Export Excel..." : "⬇ Exporter Excel"}
+        </button>
+        <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
+          {exportingPdf ? "Génération PDF..." : "📄 Rapport PDF"}
+        </button>
+      </div>
+      {loading || !summary ? <LoadingSpinner /> : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard icon={<MoneyIcon />} label="Total payé" value={`${summary.total_spent.toLocaleString()} ${currency}`} color="bg-green-100 text-green-600" />
+            <KpiCard icon={<ClockIcon />} label="Restant à payer" value={`${summary.remaining_to_pay.toLocaleString()} ${currency}`} color="bg-orange-100 text-orange-600" />
+            <KpiCard icon={<CheckIcon />} label="Bons approuvés" value={String(summary.approved_count)} color="bg-blue-100 text-blue-600" />
+            <KpiCard icon={<TotalIcon />} label="Bons payés" value={String(summary.paid_count)} color="bg-emerald-100 text-emerald-600" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <SectionCard title="Répartition par catégorie">
+              <div className="p-4"><CategoryPieChart data={categoryData} /></div>
+            </SectionCard>
+            <SectionCard title="Évolution mensuelle">
+              <div className="p-4"><MonthlyTrendBarChart data={trendData} /></div>
+            </SectionCard>
+          </div>
+          <SectionCard title="Derniers bons" linkHref="/dashboard/expenses" linkLabel="Voir tout">
+            <RecentExpensesTable expenses={recentExpenses} showEmployee={true} />
+          </SectionCard>
+        </>
+      )}
+    </>
+  );
+}
+
+function AdminDashboard({ summary, categoryData, trendData, recentExpenses, loading, onExportExcel, onExportPdf, exportingExcel, exportingPdf, currency }: any) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
+        <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/users" label="👥 Équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <QuickActionLink href="/dashboard/company" label="🏢 Société" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+        <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+          {exportingExcel ? "Export Excel..." : "⬇ Exporter Excel"}
+        </button>
+        <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
+          {exportingPdf ? "Génération PDF..." : "📄 Rapport PDF"}
+        </button>
+      </div>
+      {loading || !summary ? <LoadingSpinner /> : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard icon={<TotalIcon />} label="Total dépensé" value={`${summary.total_spent.toLocaleString()} ${currency}`} color="bg-indigo-100 text-indigo-600" />
+            <KpiCard icon={<MoneyIcon />} label="Restant à payer" value={`${summary.remaining_to_pay.toLocaleString()} ${currency}`} color="bg-orange-100 text-orange-600" />
+            <KpiCard icon={<ClockIcon />} label="En attente" value={String(summary.pending_count)} color="bg-yellow-100 text-yellow-600" />
+            <KpiCard icon={<ChartIcon />} label="Taux d'approbation" value={`${summary.approval_rate}%`} color="bg-emerald-100 text-emerald-600" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <SectionCard title="Répartition par catégorie">
+              <div className="p-4"><CategoryPieChart data={categoryData} /></div>
+            </SectionCard>
+            <SectionCard title="Évolution mensuelle">
+              <div className="p-4"><MonthlyTrendBarChart data={trendData} /></div>
+            </SectionCard>
+          </div>
+          <SectionCard title="10 Derniers bons" linkHref="/dashboard/expenses" linkLabel="Voir tout">
+            <RecentExpensesTable expenses={recentExpenses} showEmployee={true} />
+          </SectionCard>
+        </>
+      )}
+    </>
+  );
+}
+
+// ─── Shared UI Components ─────────────────────────────────────────────────────
+
+function LoadingSpinner() {
+  return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div></div>;
+}
+
+function SectionCard({ title, children, linkHref, linkLabel }: { title: string; children: React.ReactNode; linkHref?: string; linkLabel?: string }) {
+  return (
+    <div className="bg-white shadow-sm rounded-lg border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        {linkHref && <Link href={linkHref} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">{linkLabel}</Link>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// SVG Icons
+const ClockIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const CheckIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const MoneyIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const TotalIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+const ChartIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>;
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+const ROLE_LABELS: Record<string, string> = { admin: "Administrateur", manager: "Manager", accountant: "Comptable", employee: "Employé" };
+const ROLE_BADGE: Record<string, string> = {
+  admin: "bg-purple-100 text-purple-800 border-purple-200",
+  manager: "bg-blue-100 text-blue-800 border-blue-200",
+  accountant: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  employee: "bg-gray-100 text-gray-800 border-gray-200",
+};
+
+export default function DashboardPage() {
+  const { user, loading: authLoading, logout } = useAuth();
+  const router = useRouter();
+
+  const [period, setPeriod] = useState("month");
+  const [summary, setSummary] = useState<any>(null);
+  const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [trendData, setTrendData] = useState<any[]>([]);
+  const [recentExpenses, setRecentExpenses] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [recentNotifs, setRecentNotifs] = useState<any[]>([]);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const [impersonation, setImpersonation] = useState<{
+    active: boolean;
+    companyName: string;
+    adminEmail: string;
+    originalToken: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const imp = sessionStorage.getItem("impersonation");
+      if (imp) {
+        setImpersonation(JSON.parse(imp));
+      }
+    }
+  }, []);
+
+  const handleExitImpersonation = () => {
+    if (impersonation) {
+      setToken(impersonation.originalToken);
+      sessionStorage.removeItem("impersonation");
+      router.push("/dashboard/super-admin");
+    }
+  };
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Poll notification count every 30 seconds
+  useEffect(() => {
+    if (!user) return;
+    const fetchCount = async () => {
+      try {
+        const data = await api.getUnreadCount() as any;
+        setUnreadCount(data.count || 0);
+      } catch {}
+    };
+    const fetchRecent = async () => {
+      try {
+        const data = await api.getNotifications(1, 8) as any[];
+        setRecentNotifs(data);
+      } catch {}
+    };
+    fetchCount();
+    fetchRecent();
+    const interval = setInterval(() => { fetchCount(); fetchRecent(); }, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const isEmployee = user?.role === "employee";
+  const needsCharts = ["admin", "manager", "accountant"].includes(user?.role || "");
+  const [companyCurrency, setCompanyCurrency] = useState("XOF");
+  const [subStatus, setSubStatus] = useState<string | null>(null);
+  const [company, setCompany] = useState<any>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      setDataLoading(true);
+      setSubStatus(null);
+      try {
+        // Fetch company first to check subscription status (bypasses restriction)
+        const compRes = await api.getCompany() as any;
+        setCompany(compRes);
+        setCompanyCurrency(compRes?.currency || "XOF");
+
+        // Subscription guards for non-super-admins
+        if (user.role !== "super_admin") {
+          if (compRes?.subscription_status === "pending_selection") {
+            if (user.role === "admin") {
+              router.push("/dashboard/subscription-select");
+              return;
+            } else {
+              setSubStatus("pending_selection");
+              setDataLoading(false);
+              return;
+            }
+          }
+
+          if (compRes?.subscription_status === "suspended") {
+            setSubStatus("suspended");
+            setDataLoading(false);
+            return;
+          }
+
+          if (compRes?.subscription_status === "trial") {
+            const expiresAt = new Date(compRes.trial_expires_at);
+            if (expiresAt < new Date()) {
+              setSubStatus("trial_expired");
+              setDataLoading(false);
+              return;
+            }
+          }
+        }
+
+        // If active, load standard dashboard statistics
+        const query = buildDateRange(period);
+        const calls: Promise<any>[] = [
+          api.getDashboardSummary(query),
+          // Comptable sees only approved expenses (to pay)
+          api.getDashboardRecentExpenses(user.role === "accountant" ? "approved" : undefined),
+        ];
+        if (needsCharts) {
+          calls.push(api.getDashboardByCategory(query));
+          calls.push(api.getDashboardMonthlyTrend(query));
+        }
+        const [sumRes, recentRes, catRes, trendRes] = await Promise.all(calls);
+        setSummary(sumRes);
+        setRecentExpenses(recentRes as any[]);
+        if (needsCharts) {
+          setCategoryData(catRes as any[]);
+          setTrendData(trendRes as any[]);
+        }
+      } catch (err: any) {
+        console.error("Dashboard load error", err);
+        // Handle 402 responses directly from the backend
+        if (err?.status === 402 || err?.message?.includes("trial_expired") || err?.message?.includes("pending_selection")) {
+          if (err?.message?.includes("pending_selection")) {
+            if (user.role === "admin") {
+              router.push("/dashboard/subscription-select");
+            } else {
+              setSubStatus("pending_selection");
+            }
+          } else {
+            setSubStatus("trial_expired");
+          }
+        }
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    load();
+  }, [user, period, router]);
+
+  if (authLoading || !user) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+  }
+
+  if (subStatus) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6">
+        <div className="max-w-md w-full bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl"></div>
+
+          <div className="bg-slate-800/80 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 border border-slate-700/50">
+            <span className="text-4xl">⚠️</span>
+          </div>
+
+          {subStatus === "pending_selection" && (
+            <>
+              <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                Configuration requise
+              </h2>
+              <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                L'abonnement de votre entreprise n'a pas encore été configuré. Veuillez contacter votre administrateur principal pour choisir une formule ou activer la période d'essai de 7 jours.
+              </p>
+            </>
+          )}
+
+          {subStatus === "trial_expired" && (
+            <>
+              <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">
+                Période d'essai expirée
+              </h2>
+              <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                La période d'essai gratuite de 7 jours de votre entreprise (<strong>{company?.name}</strong>) a expiré.
+                {user?.role === "admin"
+                  ? " Pour continuer à gérer vos notes de frais et vos avances de caisse, veuillez souscrire à une formule supérieure."
+                  : " Veuillez contacter votre administrateur principal pour régulariser l'abonnement."
+                }
+              </p>
+              {user?.role === "admin" && (
+                <Link
+                  href="/dashboard/subscription-select"
+                  className="block w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold shadow-lg shadow-indigo-500/20 active:scale-95 transition duration-200 mb-4 text-center"
+                >
+                  Choisir un forfait 💳
+                </Link>
+              )}
+            </>
+          )}
+
+          {subStatus === "suspended" && (
+            <>
+              <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                Accès Suspendu
+              </h2>
+              <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                L'abonnement de votre entreprise a été suspendu par l'administration FlowBon. Veuillez contacter le support technique ou votre administrateur principal pour réactiver l'accès.
+              </p>
+            </>
+          )}
+
+          <button
+            onClick={logout}
+            className="w-full py-3 px-6 rounded-xl border border-slate-805 hover:border-slate-700 text-slate-400 hover:text-white bg-slate-900/50 hover:bg-slate-900/80 transition duration-200 text-sm font-semibold"
+          >
+            Se déconnecter
+          </button>
+        </div>
       </div>
     );
   }
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "bg-purple-100 text-purple-800 border-purple-200";
-      case "manager":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "accountant":
-        return "bg-emerald-100 text-emerald-800 border-emerald-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      await api.exportExpensesExcel(buildDateRange(period));
+    } catch {
+      alert("Erreur lors de l'export Excel");
+    } finally {
+      setExportingExcel(false);
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    const roles: Record<string, string> = {
-      admin: "Administrateur",
-      manager: "Manager",
-      accountant: "Comptable",
-      employee: "Employé"
-    };
-    return roles[role] || role;
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      await api.exportExpensesPdf(buildDateRange(period));
+    } catch {
+      alert("Erreur lors de l'export PDF");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const greetings: Record<string, string> = {
+    employee: `Bonjour, ${user.name} 👋`,
+    manager: `Tableau de bord Manager`,
+    accountant: `Tableau de bord Comptabilité`,
+    admin: `Vue d'ensemble — Administration`,
+  };
+
+  const dashboardProps = {
+    summary,
+    categoryData,
+    trendData,
+    recentExpenses,
+    loading: dataLoading,
+    onExportExcel: handleExportExcel,
+    onExportPdf: handleExportPdf,
+    exportingExcel,
+    exportingPdf,
+    period,
+    isBackupAccountant: user.is_backup_accountant,
+    isBackupManager: user.is_backup_manager,
+    currency: companyCurrency,
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50 pb-12">
+      {/* Impersonation Banner */}
+      {impersonation?.active && (
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 text-white shadow-sm flex items-center justify-between text-xs sm:text-sm font-semibold sticky top-0 z-50">
+          <div className="flex items-center gap-2">
+            <span>👁️</span>
+            <span>
+              <strong>Mode Support Actif</strong> — Vous êtes connecté sur l'espace client de{" "}
+              <strong className="underline">{impersonation.companyName}</strong> ({impersonation.adminEmail})
+            </span>
+          </div>
+          <button
+            onClick={handleExitImpersonation}
+            className="px-3 py-1 rounded bg-white text-orange-700 font-bold hover:bg-orange-50 transition-colors shadow-sm whitespace-nowrap"
+          >
+            Quitter le support
+          </button>
+        </div>
+      )}
+
+      {/* Super Admin Announcement Banner */}
+      {user.role === "super_admin" && !impersonation?.active && (
+        <div className="bg-gradient-to-r from-indigo-700 via-violet-700 to-indigo-800 px-4 py-2 text-white shadow-sm flex items-center justify-between text-xs sm:text-sm font-medium sticky top-0 z-50">
+          <div className="flex items-center gap-2">
+            <span>🛡️</span>
+            <span>
+              <strong>Mode Super Administrateur détecté.</strong> Vous pouvez superviser l'ensemble de la plateforme.
+            </span>
+          </div>
+          <Link
+            href="/dashboard/super-admin"
+            className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold transition-all text-xs whitespace-nowrap"
+          >
+            Ouvrir la Console globale →
+          </Link>
+        </div>
+      )}
+
+      {/* Navbar */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 flex items-center">
-                <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
-                  FlowBon
-                </span>
-              </div>
+            <div className="flex items-center gap-6">
+              <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">FlowBon</span>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getRoleBadgeColor(user.role)}`}>
-                {getRoleLabel(user.role)}
-              </span>
-              <button
-                onClick={logout}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                Déconnexion
-              </button>
+            <div className="flex items-center space-x-3">
+              {/* Bell notification */}
+              <div className="relative" ref={bellRef}>
+                <button
+                  onClick={() => { setBellOpen(!bellOpen); setProfileOpen(false); }}
+                  className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  aria-label="Notifications"
+                >
+                  <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {bellOpen && (
+                  <div className="absolute right-0 mt-2 w-80 rounded-xl shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-900">Notifications</p>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={async () => {
+                            await api.markAllNotificationsRead();
+                            setUnreadCount(0);
+                            setRecentNotifs((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+                          }}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Tout lire
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto py-1">
+                      {recentNotifs.length === 0 ? (
+                        <p className="px-4 py-6 text-sm text-center text-gray-400">Aucune notification</p>
+                      ) : (
+                        recentNotifs.map((notif) => (
+                          <Link
+                            key={notif.id}
+                            href={notif.link || "/dashboard/notifications"}
+                            onClick={async () => {
+                              setBellOpen(false);
+                              if (!notif.read_at) {
+                                await api.markNotificationRead(notif.id);
+                                setUnreadCount((c) => Math.max(0, c - 1));
+                              }
+                            }}
+                            className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${notif.read_at ? "opacity-60" : ""}`}
+                          >
+                            <span className="text-lg flex-shrink-0">
+                              {notif.type === "expense_approved" ? "✅" : notif.type === "expense_rejected" ? "❌" : notif.type === "expense_paid" ? "💸" : "📝"}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-900 truncate">{notif.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.message}</p>
+                            </div>
+                            {!notif.read_at && <span className="flex-shrink-0 w-2 h-2 mt-1.5 rounded-full bg-indigo-500" />}
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                    <div className="border-t border-gray-100 py-2">
+                      <Link
+                        href="/dashboard/notifications"
+                        onClick={() => setBellOpen(false)}
+                        className="block px-4 py-2 text-xs text-center text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        Voir toutes les notifications →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* User profile dropdown */}
+              <div className="relative" ref={profileRef}>
+                <button
+                  onClick={() => setProfileOpen(!profileOpen)}
+                  className="flex items-center gap-2 rounded-full pl-1 pr-3 py-1 hover:bg-gray-100 transition-colors"
+                >
+                  {/* Avatar with initials */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${user.role === 'admin' ? 'bg-purple-500' : user.role === 'manager' ? 'bg-blue-500' : user.role === 'accountant' ? 'bg-emerald-500' : 'bg-gray-500'}`}>
+                    {user.name?.charAt(0)?.toUpperCase() || "?"}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 hidden sm:block">{user.name}</span>
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+
+                {profileOpen && (
+                  <div className="absolute right-0 mt-2 w-64 rounded-xl shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                    {/* Profile header */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900">{user.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{user.email}</p>
+                      <span className={`mt-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${ROLE_BADGE[user.role] || ROLE_BADGE.employee}`}>
+                        {ROLE_LABELS[user.role] || user.role}
+                      </span>
+                    </div>
+                    {/* Menu items */}
+                    <div className="py-1">
+                      <Link
+                        href="/dashboard/notifications"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                        Notifications
+                        {unreadCount > 0 && <span className="ml-auto inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">{unreadCount}</span>}
+                      </Link>
+                      <Link
+                        href="/dashboard/company"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                        Ma société
+                      </Link>
+                      {["admin", "manager", "super_admin"].includes(user.role) && (
+                        <Link
+                          href="/dashboard/users"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          Équipe
+                        </Link>
+                      )}
+                    </div>
+                    <div className="border-t border-gray-100 py-1">
+                      <button
+                        onClick={() => { setProfileOpen(false); logout(); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        Déconnexion
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Bonjour, {user.name} 👋
-            </h1>
-            <p className="text-gray-500 mb-8">
-              Bienvenue sur votre espace de gestion FlowBon.
+      {/* Trial Countdown Banner */}
+      {user.role === "admin" && company?.subscription_status === "trial" && company?.trial_expires_at && (
+        <TrialCountdownBanner trialExpiresAt={company.trial_expires_at} />
+      )}
+
+      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{greetings[user.role] || `Bonjour, ${user.name}`}</h1>
+            <p className="text-gray-500 mt-1 text-sm">
+              {user.role === "employee" && "Gérez vos bons de dépense et suivez leur statut."}
+              {user.role === "manager" && "Validez les bons de votre équipe et suivez les dépenses."}
+              {user.role === "accountant" && "Traitez les remboursements et exportez les données comptables."}
+              {user.role === "admin" && "Supervision complète des dépenses et de l'organisation."}
             </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Card 1 */}
-              <Link href="/dashboard/company" className="group block rounded-xl border border-indigo-100 bg-indigo-50/50 p-6 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Société</h3>
-                <p className="text-gray-500 text-sm">Voir et gérer les informations de votre entreprise.</p>
-              </Link>
-
-              {/* Card 2 (Conditional based on role) */}
-              {['manager', 'admin', 'super_admin'].includes(user.role) && (
-                <Link href="/dashboard/users" className="group block rounded-xl border border-blue-100 bg-blue-50/50 p-6 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Équipe</h3>
-                  <p className="text-gray-500 text-sm">Gérez vos utilisateurs et invités en toute sécurité.</p>
-                </Link>
-              )}
-
-              {/* Card 3 (Conditional based on role) */}
-              {['accountant', 'admin', 'super_admin'].includes(user.role) && (
-                <div className="bg-emerald-50/50 rounded-xl p-6 border border-emerald-100 transition-all hover:shadow-md">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Paiements</h3>
-                  <p className="text-gray-500 text-sm">Traitez les remboursements en attente.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-10 border-t border-gray-100 pt-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Informations de profil</h2>
-              <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Nom</p>
-                  <p className="text-base text-gray-900">{user.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Email</p>
-                  <p className="text-base text-gray-900">{user.email}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">ID Utilisateur</p>
-                  <p className="text-xs text-gray-900 font-mono mt-1">{user.id}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Rôle</p>
-                  <p className="text-base text-gray-900 capitalize">{getRoleLabel(user.role)}</p>
-                </div>
-              </div>
-            </div>
           </div>
+          {/* Period selector — uniquement pour les rôles qui ont des graphiques */}
+          {needsCharts && (
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="block pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md shadow-sm bg-white"
+            >
+              <option value="all">Toute la période</option>
+              <option value="month">Ce mois-ci</option>
+              <option value="quarter">Ce trimestre</option>
+              <option value="year">Cette année</option>
+            </select>
+          )}
         </div>
+
+        {/* Role-specific content */}
+        {user.role === "employee" && <EmployeeDashboard {...dashboardProps} />}
+        {user.role === "manager" && <ManagerDashboard {...dashboardProps} />}
+        {user.role === "accountant" && <AccountantDashboard {...dashboardProps} />}
+        {(user.role === "admin" || user.role === "super_admin") && <AdminDashboard {...dashboardProps} />}
       </main>
     </div>
   );

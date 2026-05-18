@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "../../../lib/api";
 
 const statuses = ["draft", "pending"];
@@ -9,16 +10,64 @@ const statuses = ["draft", "pending"];
 export default function NewExpensePage() {
   const [formData, setFormData] = useState({
     amount: "",
-    currency: "EUR",
-    category: "",
+    currency: "XOF",
+    category_id: "",
     description: "",
     expense_date: "",
     status: "draft",
   });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [activeAdvances, setActiveAdvances] = useState<any[]>([]);
+  const [selectedAdvanceId, setSelectedAdvanceId] = useState("");
+  
   const [loading, setLoading] = useState(false);
+  const [catsLoading, setCatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    // Read query params safely to avoid Next.js Suspense de-optimization on build
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const advId = params.get("advance_id");
+      if (advId) {
+        setSelectedAdvanceId(advId);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const initPage = async () => {
+      try {
+        const [cats, comp, advances] = await Promise.all([
+          api.getCategories(true),
+          api.getCompany(),
+          api.getAdvances({ status_filter: "disbursed" }),
+        ]);
+        setCategories(cats as any[]);
+        setActiveAdvances(advances as any[]);
+        
+        if ((cats as any[]).length > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            category_id: (cats as any[])[0].id,
+            currency: (comp as any).currency || "XOF",
+          }));
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            currency: (comp as any).currency || "XOF",
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to load initial data", err);
+      } finally {
+        setCatsLoading(false);
+      }
+    };
+    initPage();
+  }, []);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -26,6 +75,10 @@ export default function NewExpensePage() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!formData.category_id) {
+      setError("Veuillez sélectionner une catégorie.");
+      return;
+    }
     setError(null);
     setMessage(null);
     setLoading(true);
@@ -34,14 +87,23 @@ export default function NewExpensePage() {
       const data = {
         amount: Number(formData.amount),
         currency: formData.currency,
-        category: formData.category,
+        category_id: formData.category_id,
         description: formData.description,
         expense_date: formData.expense_date,
         status: formData.status,
+        advance_id: selectedAdvanceId || null,
       };
-      const created = await api.createExpense(data);
+      const created = await api.createExpense(data) as any;
       setMessage("Bon de dépense créé.");
-      router.push(`/dashboard/expenses/${(created as any).id}`);
+      
+      if (selectedAdvanceId) {
+        // Redirect back to the cash advance details for a smooth reconciliation flow!
+        router.push(`/dashboard/advances/${selectedAdvanceId}`);
+      } else if (created && created.id) {
+        router.push(`/dashboard/expenses/${created.id}`);
+      } else {
+        router.push("/dashboard/expenses");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Impossible de créer le bon de dépense.");
     } finally {
@@ -52,6 +114,19 @@ export default function NewExpensePage() {
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
+        {/* Breadcrumbs */}
+        <div className="mb-6 flex items-center gap-2">
+          <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            Tableau de bord
+          </Link>
+          <span className="text-slate-300">/</span>
+          <Link href="/dashboard/expenses" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            Dépenses
+          </Link>
+          <span className="text-slate-300">/</span>
+          <span className="text-sm font-medium text-slate-400">Nouveau</span>
+        </div>
+
         <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-slate-900">Nouveau bon de dépense</h1>
@@ -77,13 +152,13 @@ export default function NewExpensePage() {
               </label>
 
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Devise</span>
+                <span className="text-sm font-medium text-slate-700">Devise (Définie par la société)</span>
                 <input
                   type="text"
                   value={formData.currency}
-                  onChange={(e) => handleChange("currency", e.target.value)}
-                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                  required
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-500 cursor-not-allowed focus:outline-none"
+                  readOnly
+                  disabled
                 />
               </label>
             </div>
@@ -91,13 +166,22 @@ export default function NewExpensePage() {
             <div className="grid gap-6 sm:grid-cols-2">
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Catégorie</span>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => handleChange("category", e.target.value)}
-                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                  required
-                />
+                {catsLoading ? (
+                  <div className="mt-2 text-slate-500 text-sm">Chargement des catégories...</div>
+                ) : (
+                  <select
+                    value={formData.category_id}
+                    onChange={(e) => handleChange("category_id", e.target.value)}
+                    className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                    required
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </label>
 
               <label className="block">
@@ -111,6 +195,23 @@ export default function NewExpensePage() {
                 />
               </label>
             </div>
+
+            {/* Optional cash advance dropdown */}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Associer à une avance de caisse active (Facultatif)</span>
+              <select
+                value={selectedAdvanceId}
+                onChange={(e) => setSelectedAdvanceId(e.target.value)}
+                className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
+              >
+                <option value="">Aucune avance (Dépense standard)</option>
+                {activeAdvances.map((adv) => (
+                  <option key={adv.id} value={adv.id}>
+                    {parseFloat(adv.amount).toLocaleString()} {adv.currency} — {adv.description || "Sans motif"}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Description</span>
@@ -138,6 +239,12 @@ export default function NewExpensePage() {
             </label>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Link
+                href="/dashboard/expenses"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors"
+              >
+                Annuler
+              </Link>
               <button
                 type="submit"
                 disabled={loading}

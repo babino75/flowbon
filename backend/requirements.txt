@@ -9,3 +9,6 @@ python-dotenv
 pydantic[email]
 python-multipart
 slowapi
+resend
+openpyxl
+reportlab

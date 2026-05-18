@@ -74,6 +74,22 @@ def update_user_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé")
 
     user.role = role_update.role
+    
+    # If the user is an employee, they cannot have backup roles (fraud prevention)
+    if user.role == "employee":
+        user.is_backup_manager = False
+        user.is_backup_accountant = False
+        if role_update.is_backup_manager or role_update.is_backup_accountant:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Un employé ne peut pas avoir de rôle suppléant pour éviter les fraudes."
+            )
+    else:
+        if role_update.is_backup_manager is not None:
+            user.is_backup_manager = role_update.is_backup_manager
+        if role_update.is_backup_accountant is not None:
+            user.is_backup_accountant = role_update.is_backup_accountant
+            
     db.commit()
     db.refresh(user)
     return user

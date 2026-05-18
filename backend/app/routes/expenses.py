@@ -12,13 +12,17 @@ from app.models.attachment import Attachment
 from app.models.company import Company
 from app.models.expense import ExpenseRequest, ExpenseStatus
 from app.models.user import User
+from app.models.approval_log import ApprovalLog
 from app.schemas.attachment import AttachmentResponse
+from app.schemas.approval_log import ApprovalLogResponse, RejectSchema, CommentSchema
 from app.schemas.expense import ExpenseCreateSchema, ExpenseResponse, ExpenseUpdateSchema
 from app.services.tenant import (
     get_expense_for_company,
     get_attachment_for_expense,
     list_expenses_for_company,
+    get_expense_logs_for_company,
 )
+from app.services import notification_service
 from app.utils.files import MAX_ATTACHMENTS_PER_EXPENSE, ensure_upload_dir, save_upload, validate_upload
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -54,7 +58,7 @@ def create_expense(
         user_id=current_user.id,
         amount=expense_in.amount,
         currency=currency,
-        category=expense_in.category,
+        category_id=expense_in.category_id,
         description=expense_in.description,
         status=expense_in.status,
         expense_date=expense_in.expense_date,
@@ -63,7 +67,33 @@ def create_expense(
     db.add(expense)
     db.commit()
     db.refresh(expense)
+
+    # Log action
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="created"
+    )
+    db.add(log)
+    if expense.status == ExpenseStatus.pending.value:
+        log_submit = ApprovalLog(
+            company_id=expense.company_id,
+            expense_request_id=expense.id,
+            user_id=current_user.id,
+            action="submitted"
+        )
+        db.add(log_submit)
+    
+    db.commit()
+    db.refresh(expense)
+
+    if expense.status == ExpenseStatus.pending.value:
+        # Notify managers when created directly with pending status
+        notification_service.on_expense_submitted(db, expense, current_user)
+
     return expense
+
 
 
 @router.get("", response_model=List[ExpenseResponse])
@@ -111,10 +141,14 @@ def update_expense(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    if expense.user_id != current_user.id:
+    is_admin = current_user.role in ["admin", "super_admin"]
+
+    # Only creator or admin can update
+    if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    if expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+    # Non-admins can only update draft or pending requests
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon ne peut plus être modifié")
 
     for field, value in expense_update.model_dump(exclude_unset=True).items():
@@ -135,10 +169,14 @@ def delete_expense(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    if expense.user_id != current_user.id:
+    is_admin = current_user.role in ["admin", "super_admin"]
+
+    # Only creator or admin can delete
+    if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    if expense.status != ExpenseStatus.draft.value:
+    # Non-admins can only delete draft requests
+    if not is_admin and expense.status != ExpenseStatus.draft.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seuls les brouillons peuvent être supprimés")
 
     db.delete(expense)
@@ -159,13 +197,24 @@ def submit_expense(
     if expense.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    if expense.status != ExpenseStatus.draft.value:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être en brouillon pour être soumis")
+    if expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.rejected.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être en brouillon ou refusé pour être soumis")
 
     expense.status = ExpenseStatus.pending.value
     expense.submitted_at = datetime.utcnow()
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="submitted"
+    )
+    db.add(log)
+    
     db.commit()
     db.refresh(expense)
+    # Notify managers
+    notification_service.on_expense_submitted(db, expense, current_user)
     return expense
 
 
@@ -186,6 +235,15 @@ def cancel_expense(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon ne peut pas être annulé")
 
     expense.status = ExpenseStatus.cancelled.value
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="cancelled"
+    )
+    db.add(log)
+    
     db.commit()
     db.refresh(expense)
     return expense
@@ -202,8 +260,15 @@ def upload_attachments(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    if expense.user_id != current_user.id:
+    is_admin = current_user.role in ["admin", "super_admin"]
+
+    # Only creator or admin can upload
+    if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    # Non-admins cannot upload attachments on approved or paid expenses
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible d'ajouter des justificatifs à un bon validé")
 
     existing_attachments = db.query(Attachment).filter(Attachment.expense_request_id == expense.id).count()
     if existing_attachments + len(files) > MAX_ATTACHMENTS_PER_EXPENSE:
@@ -245,8 +310,15 @@ def delete_attachment(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    if expense.user_id != current_user.id:
+    is_admin = current_user.role in ["admin", "super_admin"]
+
+    # Only creator or admin can delete
+    if expense.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    # Non-admins cannot delete attachments on approved or paid expenses
+    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de supprimer un justificatif d'un bon validé")
 
     attachment = get_attachment_for_expense(db, attachment_id, expense)
     if not attachment:
@@ -255,3 +327,159 @@ def delete_attachment(
     db.delete(attachment)
     db.commit()
     return {"message": "Justificatif supprimé"}
+
+
+def can_approve(approver: User, expense: ExpenseRequest) -> bool:
+    if approver.id == expense.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas approuver votre propre bon.")
+    if approver.role not in ["manager", "admin", "super_admin"] and not approver.is_backup_manager:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les managers et admins peuvent approuver.")
+    return True
+
+
+@router.post("/{expense_id}/approve", response_model=ExpenseResponse)
+def approve_expense(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    can_approve(current_user, expense)
+
+    if expense.status != ExpenseStatus.pending.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon n'est pas en attente d'approbation")
+
+    expense.status = ExpenseStatus.approved.value
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="approved"
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(expense)
+    # Notify employee + accountants
+    notification_service.on_expense_approved(db, expense, current_user)
+    return expense
+
+
+@router.post("/{expense_id}/reject", response_model=ExpenseResponse)
+def reject_expense(
+    expense_id: str,
+    reject_data: RejectSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    can_approve(current_user, expense)
+
+    if expense.status != ExpenseStatus.pending.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon n'est pas en attente d'approbation")
+
+    expense.status = ExpenseStatus.rejected.value
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="rejected",
+        comment=reject_data.comment
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(expense)
+    # Notify employee with rejection reason
+    notification_service.on_expense_rejected(db, expense, current_user, reject_data.comment)
+    return expense
+
+
+@router.post("/{expense_id}/mark-as-paid", response_model=ExpenseResponse)
+def mark_expense_as_paid(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    if current_user.role not in ["accountant", "admin", "super_admin"] and not current_user.is_backup_accountant:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé pour les paiements")
+
+    if current_user.id == expense.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas mettre en paiement votre propre bon.")
+
+    if expense.status != ExpenseStatus.approved.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être approuvé avant paiement")
+
+    expense.status = ExpenseStatus.paid.value
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="paid"
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(expense)
+    # Notify employee that payment is done
+    notification_service.on_expense_paid(db, expense, current_user)
+    return expense
+
+
+@router.post("/{expense_id}/comment", response_model=ApprovalLogResponse)
+def add_comment(
+    expense_id: str,
+    comment_data: CommentSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="commented",
+        comment=comment_data.comment
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # Optional: populate user name for immediate return
+    user_name = db.query(User.name).filter(User.id == log.user_id).scalar()
+    log.user_name = user_name
+    
+    return log
+
+
+@router.get("/{expense_id}/logs", response_model=List[ApprovalLogResponse])
+def get_expense_logs(
+    expense_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    logs = get_expense_logs_for_company(db, expense)
+    
+    # Enhance logs with user names
+    for log in logs:
+        user_name = db.query(User.name).filter(User.id == log.user_id).scalar()
+        log.user_name = user_name
+        
+    return logs

@@ -1,44 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus("loading");
     
-    if (password !== confirmPassword) {
+    if (!token) {
       setStatus("error");
-      setMessage("Les mots de passe ne correspondent pas.");
+      setMessage("Jeton de réinitialisation manquant.");
       return;
     }
-    
+
     if (password.length < 8) {
       setStatus("error");
       setMessage("Le mot de passe doit faire au moins 8 caractères.");
       return;
     }
 
+    if (password !== confirmPassword) {
+      setStatus("error");
+      setMessage("Les mots de passe ne correspondent pas.");
+      return;
+    }
+
+    setStatus("loading");
+    
     try {
-      // Note: this is a mock implementation as reset token parsing from URL is not fully implemented here
-      const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/reset-password" || "http://127.0.0.1:8000/auth/reset-password", {
+      const res = await fetch((process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000") + "/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: "mock-token", new_password: password })
+        body: JSON.stringify({ token, new_password: password })
       });
       
+      const data = await res.json();
+      
       if (!res.ok) {
-        throw new Error("Erreur lors de la réinitialisation");
+        throw new Error(data.detail || "Erreur lors de la réinitialisation du mot de passe.");
       }
       
       setStatus("success");
-      setMessage("Votre mot de passe a été réinitialisé avec succès.");
+      setMessage("Votre mot de passe a été réinitialisé avec succès !");
     } catch (err: unknown) {
       setStatus("error");
       if (err instanceof Error) {
@@ -50,14 +62,14 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-bl from-black via-slate-900 to-indigo-900 text-white p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-slate-900 to-black text-white p-4">
       <div className="max-w-md w-full space-y-8 backdrop-blur-xl bg-white/10 p-10 rounded-3xl shadow-2xl border border-white/10">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-white">
             Nouveau mot de passe
           </h2>
           <p className="mt-2 text-center text-sm text-indigo-300">
-            Veuillez entrer votre nouveau mot de passe
+            Saisissez votre nouveau mot de passe de connexion
           </p>
         </div>
         
@@ -70,7 +82,7 @@ export default function ResetPasswordPage() {
               href="/login"
               className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
             >
-              Se connecter
+              Aller à la connexion
             </Link>
           </div>
         ) : (
@@ -80,6 +92,7 @@ export default function ResetPasswordPage() {
                 {message}
               </div>
             )}
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="password">
@@ -96,6 +109,7 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="confirmPassword">
                   Confirmer le mot de passe
@@ -119,12 +133,26 @@ export default function ResetPasswordPage() {
                 disabled={status === "loading"}
                 className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {status === "loading" ? "Réinitialisation..." : "Réinitialiser le mot de passe"}
+                {status === "loading" ? "Modification..." : "Enregistrer"}
               </button>
+            </div>
+            
+            <div className="text-center mt-4">
+              <Link href="/login" className="font-medium text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+                Retour à la connexion
+              </Link>
             </div>
           </form>
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">Chargement...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
