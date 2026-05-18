@@ -311,7 +311,7 @@ def export_expenses_pdf(
     )
     
     comp_name = current_user.company.name if current_user.company else "FlowBon"
-    story.append(Paragraph("Rapport de Notes de Frais", title_style))
+    story.append(Paragraph("État Récapitulatif des Notes de Frais", title_style))
     story.append(Paragraph(f"Société : {comp_name}", subtitle_style))
     
     # Metadata Info Block
