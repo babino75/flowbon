@@ -21,11 +21,13 @@ export default function NewExpensePage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [activeAdvances, setActiveAdvances] = useState<any[]>([]);
   const [selectedAdvanceId, setSelectedAdvanceId] = useState("");
+  const [activeFiscalYear, setActiveFiscalYear] = useState<any>(null);
   
   const [loading, setLoading] = useState(false);
   const [catsLoading, setCatsLoading] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
 
@@ -43,13 +45,18 @@ export default function NewExpensePage() {
   useEffect(() => {
     const initPage = async () => {
       try {
-        const [cats, comp, advances] = await Promise.all([
-          api.getCategories(true),
+        const [cats, comp, advances, activeFY] = await Promise.all([
+          api.getCategories(true).catch(() => []),
           api.getCompany(),
-          api.getAdvances({ status_filter: "disbursed" }),
+          api.getAdvances({ status_filter: "disbursed" }).catch(() => []),
+          api.getActiveFiscalYear().catch(() => null),
         ]);
         setCategories(cats as any[]);
         setActiveAdvances(advances as any[]);
+        
+        if (activeFY) {
+          setActiveFiscalYear(activeFY);
+        }
         
         if ((cats as any[]).length > 0) {
           setFormData((prev) => ({
@@ -85,16 +92,37 @@ export default function NewExpensePage() {
   }, [selectedAdvanceId, activeAdvances]);
 
   const handleChange = (field: string, value: string) => {
+    if (field === "expense_date") {
+      setDateError(null);
+    }
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    
+    if (activeFiscalYear && formData.expense_date) {
+      const selectedYear = new Date(formData.expense_date).getFullYear();
+      const startYear = new Date(activeFiscalYear.start_date).getFullYear();
+      const endYear = new Date(activeFiscalYear.end_date).getFullYear();
+      
+      if (selectedYear < startYear || selectedYear > endYear) {
+        if (startYear === endYear) {
+          setDateError(`L'année doit être ${startYear} (exercice comptable en cours).`);
+        } else {
+          setDateError(`L'année doit être comprise entre ${startYear} et ${endYear} (exercice comptable en cours).`);
+        }
+        return;
+      }
+    }
+
     if (!formData.category_id) {
       setError("Veuillez sélectionner une catégorie.");
       return;
     }
+    
     setError(null);
+    setDateError(null);
     setMessage(null);
     setLoading(true);
 
@@ -228,9 +256,16 @@ export default function NewExpensePage() {
                   type="date"
                   value={formData.expense_date}
                   onChange={(e) => handleChange("expense_date", e.target.value)}
-                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                  className={`mt-2 block w-full rounded-2xl border bg-slate-50 px-4 py-3 text-slate-900 focus:outline-none focus:ring-indigo-500 ${
+                    dateError ? "border-red-500 focus:border-red-500" : "border-slate-200 focus:border-indigo-500"
+                  }`}
                   required
                 />
+                {dateError && (
+                  <p className="mt-2 text-xs text-red-500 font-medium">
+                    {dateError}
+                  </p>
+                )}
               </label>
             </div>
 

@@ -8,6 +8,7 @@ class DashboardSummaryResponse(BaseModel):
     paid_count: int
     remaining_to_pay: float
     approval_rate: int
+    rejected_count: int = 0
 
 class CategoryData(BaseModel):
     category: str

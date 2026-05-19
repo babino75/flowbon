@@ -38,7 +38,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
 def register(request: Request, user_in: RegisterSchema, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    existing_user = db.query(User).filter(User.email.ilike(user_in.email)).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,7 +80,7 @@ def register_invite(request: Request, invite_data: RegisterInviteSchema, db: Ses
     if invitation.email.lower() != invite_data.email.lower():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'email ne correspond pas à l'invitation")
 
-    existing_user = db.query(User).filter(User.email == invite_data.email).first()
+    existing_user = db.query(User).filter(User.email.ilike(invite_data.email)).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Un utilisateur avec cet email existe déjà")
 
@@ -102,7 +102,7 @@ def register_invite(request: Request, invite_data: RegisterInviteSchema, db: Ses
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 def login(request: Request, response: Response, login_data: LoginSchema, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = db.query(User).filter(User.email.ilike(login_data.email)).first()
     if not user or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
     if not user.is_active:
@@ -174,8 +174,10 @@ def read_users_me(current_user: User = Depends(get_current_active_user)):
 @router.post("/forgot-password")
 @limiter.limit("3/minute")
 def forgot_password(request: Request, data: ForgotPasswordSchema, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
+    print(f"[FORGOT PASSWORD] Requested email: '{data.email}'", flush=True)
+    user = db.query(User).filter(User.email.ilike(data.email)).first()
     if user:
+        print(f"[FORGOT PASSWORD] User found: {user.id} ({user.email})", flush=True)
         # Expire old tokens
         db.query(PasswordResetToken).filter(
             PasswordResetToken.user_id == user.id,
@@ -196,6 +198,8 @@ def forgot_password(request: Request, data: ForgotPasswordSchema, db: Session = 
         
         # Send email
         send_password_reset_email(user.email, token)
+    else:
+        print(f"[FORGOT PASSWORD] User not found for email: '{data.email}'", flush=True)
         
     # Always return success message for security (prevent email discovery)
     return {"message": "Si cette adresse email existe dans notre base de données, un lien de réinitialisation vient de vous être envoyé."}

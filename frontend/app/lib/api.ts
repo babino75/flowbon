@@ -584,6 +584,7 @@ export const api = {
   addCategory: async (data: { name: string; code?: string }) => {
     return fetchWithAuth("/categories", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
   },
@@ -591,6 +592,7 @@ export const api = {
   updateCategory: async (id: string, data: { name?: string; code?: string; is_active?: boolean }) => {
     return fetchWithAuth(`/categories/${id}`, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
   },
@@ -688,6 +690,43 @@ export const api = {
       method: "POST",
     });
   },
+
+  // ─── Boîte de Suggestions ───────────────────────────────────────────────────
+
+  getSuggestions: async () => {
+    return fetchWithAuth("/suggestions");
+  },
+
+  createSuggestion: async (data: {
+    title: string;
+    content: string;
+    category: string;
+    is_anonymous: boolean;
+  }) => {
+    return fetchWithAuth("/suggestions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateSuggestion: async (
+    id: string,
+    data: { status?: string; admin_response?: string }
+  ) => {
+    return fetchWithAuth(`/suggestions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteSuggestion: async (id: string) => {
+    return fetchWithAuth(`/suggestions/${id}`, {
+      method: "DELETE",
+    });
+  },
 };
+
 
 

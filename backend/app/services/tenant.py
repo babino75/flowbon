@@ -132,6 +132,7 @@ def get_dashboard_summary(db: Session, current_user: User, filters: dict):
         "approved_count": 0,
         "paid_count": 0,
         "remaining_to_pay": 0,
+        "rejected_count": 0,
     }
 
     for row in results:
@@ -145,8 +146,10 @@ def get_dashboard_summary(db: Session, current_user: User, filters: dict):
             summary["approved_count"] += count
         elif row.status == "pending":
             summary["pending_count"] += count
+        elif row.status == "rejected":
+            summary["rejected_count"] += count
 
-    total_decisions = summary["approved_count"] + summary["paid_count"] + sum(r.count for r in results if r.status == "rejected")
+    total_decisions = summary["approved_count"] + summary["paid_count"] + summary["rejected_count"]
     summary["approval_rate"] = round((summary["approved_count"] + summary["paid_count"]) / total_decisions * 100) if total_decisions > 0 else 0
 
     return summary

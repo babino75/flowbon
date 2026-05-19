@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "../../lib/api";
 import { translateStatus } from "../../lib/utils";
 
@@ -15,10 +16,11 @@ const statusOptions = [
 ];
 
 export default function ExpensesPage() {
+  const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
@@ -74,12 +76,6 @@ export default function ExpensesPage() {
             <p className="mt-2 text-slate-600">Consultez et gérez vos bons de dépense.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/dashboard/expenses/new"
-              className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-            >
-              Nouvel expense
-            </Link>
             <button
               type="button"
               onClick={fetchExpenses}

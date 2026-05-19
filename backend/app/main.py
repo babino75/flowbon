@@ -14,6 +14,7 @@ from app.routes.notifications import router as notifications_router
 from app.routes.advances import router as advances_router
 from app.routes.super_admin import router as super_admin_router
 from app.routes.fiscal_years import router as fiscal_years_router
+from app.routes.suggestions import router as suggestions_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -44,6 +45,8 @@ app.include_router(notifications_router)
 app.include_router(advances_router)
 app.include_router(super_admin_router)
 app.include_router(fiscal_years_router)
+app.include_router(suggestions_router)
+
 
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
