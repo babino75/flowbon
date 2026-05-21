@@ -47,12 +47,12 @@ def register(request: Request, user_in: RegisterSchema, db: Session = Depends(ge
 
     company_id = None
     if user_in.role == "admin":
-        company = Company(name=user_in.company_name, email=user_in.email, subscription_status="pending_selection")
+        company = Company(name=user_in.company_name, email=user_in.email, subscription_status="pending_selection", company_type=user_in.company_type)
         db.add(company)
         db.commit()
         db.refresh(company)
         company_id = company.id
-        seed_default_categories(db, company_id)
+        seed_default_categories(db, company_id, user_in.company_type)
 
     user = User(
         name=user_in.name,

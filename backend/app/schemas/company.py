@@ -13,6 +13,8 @@ class CompanyBase(BaseModel):
     email: Optional[EmailStr] = None
     max_users: Optional[int] = None
     currency: Optional[str] = "XOF"
+    company_type: Optional[str] = "profit"
+    has_separate_cashier: Optional[bool] = False
 
 
 class CompanyCreateSchema(CompanyBase):
@@ -29,6 +31,7 @@ class CompanyUpdateSchema(BaseModel):
     subscription_status: Optional[str] = None
     max_users: Optional[int] = None
     currency: Optional[str] = None
+    has_separate_cashier: Optional[bool] = None
 
 
 class CompanyResponse(CompanyBase):

@@ -54,7 +54,15 @@ def update_my_company(
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise non trouvée")
 
-    for field, value in company_in.model_dump(exclude_unset=True).items():
+    update_data = company_in.model_dump(exclude_unset=True)
+
+    # Restreindre les champs sensibles si l'utilisateur n'est pas super_admin
+    if current_user.role != "super_admin":
+        sensitive_fields = ["subscription_plan", "subscription_status", "max_users"]
+        for field in sensitive_fields:
+            update_data.pop(field, None)
+
+    for field, value in update_data.items():
         setattr(company, field, value)
 
     db.commit()

@@ -54,8 +54,13 @@ def create_expense(
 
     submitted_at = datetime.utcnow() if expense_in.status == ExpenseStatus.pending.value else None
 
-    # Auto-assigner l'exercice comptable actif
+    # Validation rigoureuse : Exercice comptable actif obligatoire
     active_fy = get_active_fiscal_year(db, current_user.company_id)
+    if not active_fy:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aucun exercice comptable actif n'est ouvert pour cette entreprise."
+        )
 
     expense = ExpenseRequest(
         company_id=current_user.company_id,
@@ -68,7 +73,7 @@ def create_expense(
         expense_date=expense_in.expense_date,
         submitted_at=submitted_at,
         advance_id=expense_in.advance_id,
-        fiscal_year_id=active_fy.id if active_fy else None,
+        fiscal_year_id=active_fy.id,
     )
     db.add(expense)
     db.commit()
@@ -385,10 +390,28 @@ def reject_expense(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    can_approve(current_user, expense)
-
-    if expense.status != ExpenseStatus.pending.value:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon n'est pas en attente d'approbation")
+    if expense.status == ExpenseStatus.pending.value:
+        can_approve(current_user, expense)
+    elif expense.status == ExpenseStatus.approved.value:
+        is_accountant_or_admin = (
+            current_user.role in ["accountant", "admin", "super_admin"]
+            or current_user.is_backup_accountant
+        )
+        if not is_accountant_or_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Seuls les comptables et administrateurs peuvent rejeter un bon déjà approuvé."
+            )
+        if current_user.id == expense.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Vous ne pouvez pas rejeter votre propre bon."
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le bon doit être en attente (pending) ou approuvé (approved) pour être refusé."
+        )
 
     expense.status = ExpenseStatus.rejected.value
     
@@ -407,8 +430,8 @@ def reject_expense(
     return expense
 
 
-@router.post("/{expense_id}/mark-as-paid", response_model=ExpenseResponse)
-def mark_expense_as_paid(
+@router.post("/{expense_id}/validate-financial", response_model=ExpenseResponse)
+def validate_financial_expense(
     expense_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -418,13 +441,105 @@ def mark_expense_as_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
     if current_user.role not in ["accountant", "admin", "super_admin"] and not current_user.is_backup_accountant:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé pour les paiements")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé. Rôle Comptable requis pour viser financièrement.")
 
     if current_user.id == expense.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas mettre en paiement votre propre bon.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas viser votre propre bon.")
 
     if expense.status != ExpenseStatus.approved.value:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être approuvé avant paiement")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être approuvé par le manager avant d'être visé par la comptabilité.")
+
+    company = db.query(Company).filter(Company.id == expense.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    if not company.has_separate_cashier:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La séparation des rôles n'est pas active pour votre entreprise. Vous devez directement payer le bon.")
+
+    expense.status = ExpenseStatus.approved_accounting.value
+    
+    log = ApprovalLog(
+        company_id=expense.company_id,
+        expense_request_id=expense.id,
+        user_id=current_user.id,
+        action="approved_accounting",
+        comment="Visé et validé par la comptabilité."
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(expense)
+    
+    notification_service.on_expense_approved_accounting(db, expense, current_user)
+    return expense
+
+
+@router.post("/{expense_id}/mark-as-paid", response_model=ExpenseResponse)
+def mark_expense_as_paid(
+    expense_id: str,
+    caisse_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    from uuid import UUID
+    
+    expense = get_expense_for_company(db, expense_id, current_user)
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
+
+    company = db.query(Company).filter(Company.id == expense.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    if company.has_separate_cashier:
+        if current_user.role not in ["cashier", "admin", "super_admin"] and not getattr(current_user, "is_backup_cashier", False):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé pour les décaissements (Rôle Caissier requis)")
+        if expense.status != ExpenseStatus.approved_accounting.value:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être visé par la comptabilité avant décaissement")
+    else:
+        if current_user.role not in ["accountant", "admin", "super_admin"] and not current_user.is_backup_accountant:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé pour les paiements")
+        if expense.status != ExpenseStatus.approved.value:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être approuvé avant paiement")
+
+    # Cash register integration
+    # Si la dépense n'est PAS liée à une avance (remboursement direct)
+    if expense.advance_id is None:
+        from app.models.cash_register import CashRegister, CashTransaction
+        caisse = None
+        if caisse_id:
+            try:
+                c_uuid = UUID(caisse_id)
+                caisse = db.query(CashRegister).filter(
+                    CashRegister.id == c_uuid,
+                    CashRegister.company_id == current_user.company_id
+                ).first()
+                if not caisse:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La caisse spécifiée est introuvable")
+            except ValueError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de caisse invalide")
+        else:
+            # Auto-select the first/default caisse of the company if exists
+            caisse = db.query(CashRegister).filter(CashRegister.company_id == current_user.company_id).first()
+
+        if caisse:
+            if caisse.current_balance < expense.amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour payer ce bon de {expense.amount} {expense.currency}."
+                )
+            
+            # Create EXIT cash transaction
+            tx = CashTransaction(
+                cash_register_id=caisse.id,
+                type="EXIT",
+                amount=expense.amount,
+                source="expense",
+                description=f"Paiement direct de la note de frais n° {expense.id} à {expense.user.name if hasattr(expense, 'user') else ''}",
+                reference_id=expense.id,
+                created_by=current_user.id
+            )
+            caisse.current_balance -= expense.amount
+            db.add(tx)
 
     expense.status = ExpenseStatus.paid.value
     

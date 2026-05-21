@@ -9,6 +9,10 @@ class DashboardSummaryResponse(BaseModel):
     remaining_to_pay: float
     approval_rate: int
     rejected_count: int = 0
+    total_paid: float = 0.0
+    total_approved_accounting: int = 0
+    approved_accounting_count: int = 0
+    total_disbursed: float = 0.0
 
 class CategoryData(BaseModel):
     category: str

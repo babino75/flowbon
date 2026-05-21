@@ -513,6 +513,43 @@ function DashboardFilterBar({
   );
 }
 
+function CashierDashboard({
+  summary,
+  currency
+}: any) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex flex-wrap gap-2">
+          <QuickActionLink href="/dashboard/expenses?status=approved_accounting" label="💵 Bons à décaisser" color="bg-emerald-600 text-white hover:bg-emerald-700" />
+          <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-amber-500 text-white hover:bg-amber-600" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <p className="text-sm font-semibold text-slate-400">Total Décaissé</p>
+          <p className="text-3xl font-black text-slate-900 mt-2">{summary?.total_paid?.toLocaleString() || 0} {currency}</p>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <p className="text-sm font-semibold text-slate-400">Bons visés par la comptabilité</p>
+          <p className="text-3xl font-black text-amber-500 mt-2">{summary?.total_approved_accounting?.toLocaleString() || 0} bons</p>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <p className="text-sm font-semibold text-slate-400">Avances actives (remises)</p>
+          <p className="text-3xl font-black text-indigo-500 mt-2">{summary?.total_disbursed?.toLocaleString() || 0} avances</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+        <h3 className="text-lg font-black text-slate-900 mb-4">Derniers mouvements de caisse</h3>
+        <p className="text-sm text-slate-500">Pour voir le détail de vos caisses physiques, allouer des fonds ou consulter l'historique complet des opérations, rendez-vous dans l'onglet <Link href="/dashboard/caisse" className="text-indigo-600 font-semibold underline">Trésorerie & Caisses</Link>.</p>
+      </div>
+    </>
+  );
+}
+
 function AccountantDashboard({ 
   summary, 
   categoryData, 
@@ -556,7 +593,8 @@ function AccountantDashboard({
           <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
           <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/fiscal-years" label="📅 Exercices" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -659,9 +697,10 @@ function AdminDashboard({
           <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
           <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/users" label="👥 Équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/company" label="🏢 Société" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/fiscal-years" label="📅 Exercices" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -870,15 +909,16 @@ export default function DashboardPage() {
 
   // Construct dynamic filters query string (supports excluding status)
   const getFilterQueryString = (excludeStatus = false) => {
-    let q = buildDateRange(period);
+    // Les caissiers voient toujours l'historique complet pour ne rater aucun bon, peu importe la date
+    let q = user?.role === "cashier" ? "" : buildDateRange(period);
     if (selectedStatus && !excludeStatus) {
-      q += `&status=${selectedStatus}`;
+      q += (q ? "&" : "") + `status=${selectedStatus}`;
     }
     if (selectedCategory) {
-      q += `&category_id=${selectedCategory}`;
+      q += (q ? "&" : "") + `category_id=${selectedCategory}`;
     }
     if (selectedEmployee) {
-      q += `&user_id=${selectedEmployee}`;
+      q += (q ? "&" : "") + `user_id=${selectedEmployee}`;
     }
     return q;
   };
@@ -1319,6 +1359,16 @@ export default function DashboardPage() {
                         <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                         Ma société
                       </Link>
+                      {["admin", "super_admin", "accountant"].includes(user?.role) && (
+                        <Link
+                          href="/dashboard/accounting"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          Paramètres Comptables
+                        </Link>
+                      )}
                       <Link
                         href="/dashboard/suggestions"
                         onClick={() => setProfileOpen(false)}
@@ -1380,6 +1430,7 @@ export default function DashboardPage() {
         {user.role === "employee" && <EmployeeDashboard {...dashboardProps} />}
         {user.role === "manager" && <ManagerDashboard {...dashboardProps} />}
         {user.role === "accountant" && <AccountantDashboard {...dashboardProps} />}
+        {user.role === "cashier" && <CashierDashboard {...dashboardProps} />}
         {(user.role === "admin" || user.role === "super_admin") && <AdminDashboard {...dashboardProps} />}
       </main>
     </div>

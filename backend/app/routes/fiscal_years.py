@@ -52,8 +52,8 @@ def create(
     current_user: User = Depends(get_current_active_user),
 ):
     """Crée un nouvel exercice comptable (admin seulement)."""
-    if current_user.role not in ("admin", "super_admin"):
-        raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent créer un exercice.")
+    if current_user.role not in ("admin", "super_admin", "accountant"):
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs et comptables peuvent créer un exercice.")
     fy = create_fiscal_year(
         db,
         company_id=current_user.company_id,
@@ -74,7 +74,7 @@ def close(
     Clôture un exercice comptable.
     Bloqué si des bons 'En attente' ou 'Brouillon' existent encore.
     """
-    if current_user.role not in ("admin", "super_admin"):
-        raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent clôturer un exercice.")
+    if current_user.role not in ("admin", "super_admin", "accountant"):
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs et comptables peuvent clôturer un exercice.")
     fy = close_fiscal_year(db, fiscal_year_id, current_user.company_id, current_user)
     return enrich_fiscal_year_with_stats(db, fy)

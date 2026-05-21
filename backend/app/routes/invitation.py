@@ -9,6 +9,7 @@ from app.models.invitation import Invitation
 from app.models.user import User
 from app.schemas.invitation import InvitationCreateSchema, InvitationResponse
 from app.services.tenant import get_invitation_for_company, list_invitations_for_company
+from app.services.notification_service import send_invitation_email
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
@@ -23,6 +24,10 @@ def create_invitation(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
     if current_user.company_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Entreprise requise pour envoyer une invitation")
+
+    existing_user = db.query(User).filter(User.email.ilike(invitation_in.email)).first()
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Un compte avec cette adresse email existe déjà.")
 
     token = uuid.uuid4().hex
     expires_at = datetime.utcnow() + timedelta(days=7)
@@ -39,6 +44,16 @@ def create_invitation(
     db.add(invitation)
     db.commit()
     db.refresh(invitation)
+    
+    company_name = current_user.company.name if current_user.company else "votre entreprise"
+    send_invitation_email(
+        user_email=invitation.email,
+        company_name=company_name,
+        inviter_name=current_user.name,
+        role=invitation.role,
+        token=token
+    )
+    
     return invitation
 
 

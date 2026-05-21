@@ -45,6 +45,15 @@ FlowBon V2 doit conserver son **Superpouvoir** : **la simplicité et le rapproch
 
 ---
 
+### 💵 Pilier 5 : Gestion Complète de la Caisse Physique (Trésorerie & Journal de Caisse)
+*Transformer FlowBon en véritable outil de gestion de trésorerie interne sécurisé.*
+- **Alimentation de Caisse (Bons d'Entrée) :** Suivi des flux d'espèces entrants (retrait de la banque pour alimenter la caisse, apports des associés, versements divers).
+- **Journal de Caisse automatique :** Calcul en temps réel du solde théorique de la caisse (Solde Initial + Entrées - Sorties).
+- **Génération automatique de Bon d'Entrée sur reliquat :** Lors de la clôture (rapprochement) d'une avance de caisse, si l'employé a un solde positif restant (monnaie à rendre), le système génère automatiquement un **Bon d'Entrée de Caisse** pour acter le retour des fonds physiques dans le coffre.
+- **Clôtures de Caisse & Rapprochement :** États de caisse périodiques (journal PDF) pour permettre aux gestionnaires de caisse de comparer le solde système et le solde physique lors des inventaires de caisse.
+
+---
+
 ## 💰 Évolution de la Stratégie Tarifaire (V2)
 
 Pour rester hautement compétitif face à N2F tout en maximisant la rentabilité :
@@ -52,7 +61,7 @@ Pour rester hautement compétitif face à N2F tout en maximisant la rentabilité
 | Offre / Pack | Limites d'utilisateurs | Fonctionnalités incluses | Tarif mensuel ciblé |
 | :--- | :--- | :--- | :--- |
 | **Starter** | Jusqu'à 10 utilisateurs | Avances, dépenses standard, multi-devises, validation simple | **15 000 XOF** |
-| **Business** | Jusqu'à 50 utilisateurs | Tout le Starter + Rapports avancés + Export comptable | **35 000 XOF** |
+| **Business** | Jusqu'à 50 utilisateurs | Tout le Starter + **Gestion Complète de Caisse (Bons d'Entrée, Journal & Rapprochement)** + Rapports avancés | **35 000 XOF** |
 | **Premium (V2 IA)** | Jusqu'à 100 utilisateurs | Tout le Business + **Lecture OCR (IA) + Indemnités Kilométriques** | **75 000 XOF** |
 | **Enterprise** | Illimité | Tout le Premium + **Archivage à Valeur Probante + API d'intégration ERP** | **Sur devis** |
 
@@ -61,5 +70,6 @@ Pour rester hautement compétitif face à N2F tout en maximisant la rentabilité
 ## 📋 Prochaines Étapes pour le Développement
 
 1. **Validation Commerciale (V1) :** Signer les 3 premiers clients pilotes sur la V1 actuelle pour valider l'expérience du rapprochement financier.
-2. **Spécification Technique du module OCR :** Tester la précision d'API de lecture automatique de factures sur des reçus locaux (factures de supermarchés, reçus de taxi, reçus de carburant).
-3. **Sécurité & Chiffrement :** Renforcer l'infrastructure de stockage des justificatifs pour préparer l'archivage légal.
+2. **Spécification Technique & Conception du Module de Caisse (Pilier 5) :** Définir le modèle de données relationnel propre pour stocker les transactions de caisse (Journal, Entrées, Sorties) en garantissant l'auditabilité (non-altérabilité des écritures).
+3. **Spécification Technique du module OCR :** Tester la précision d'API de lecture automatique de factures sur des reçus locaux (factures de supermarchés, reçus de taxi, reçus de carburant).
+4. **Sécurité & Chiffrement :** Renforcer l'infrastructure de stockage des justificatifs pour préparer l'archivage légal.

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -21,9 +21,11 @@ class Company(Base):
     # Subscription management (SaaS mode vs Self-hosted)
     subscription_plan = Column(String, default="free", nullable=False)
     subscription_status = Column(String, default="pending_selection", nullable=False)
+    company_type = Column(String, default="profit", nullable=False)
     max_users = Column(Integer, default=10, nullable=False)
     currency = Column(String, default="XOF", nullable=False)
     trial_expires_at = Column(DateTime, nullable=True)
+    has_separate_cashier = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(

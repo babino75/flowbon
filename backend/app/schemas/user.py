@@ -11,6 +11,7 @@ class UserBase(BaseModel):
     role: str = "employee"
     is_backup_manager: bool = False
     is_backup_accountant: bool = False
+    is_backup_cashier: bool = False
 
 
 class UserCreate(UserBase):
@@ -21,6 +22,7 @@ class UserRoleUpdate(BaseModel):
     role: str
     is_backup_manager: Optional[bool] = None
     is_backup_accountant: Optional[bool] = None
+    is_backup_cashier: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 

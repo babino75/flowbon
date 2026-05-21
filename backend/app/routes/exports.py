@@ -543,7 +543,7 @@ def export_payroll_excel(
         func.sum(ExpenseRequest.amount).label("total_amount")
     ).join(User, ExpenseRequest.user_id == User.id)
     
-    if current_user.role != "super_admin":
+    if current_user.company_id:
         query = query.filter(ExpenseRequest.company_id == current_user.company_id)
         
     query = query.filter(ExpenseRequest.status == "approved")
@@ -681,7 +681,7 @@ def export_payroll_pdf(
         func.sum(ExpenseRequest.amount).label("total_amount")
     ).join(User, ExpenseRequest.user_id == User.id)
     
-    if current_user.role != "super_admin":
+    if current_user.company_id:
         query = query.filter(ExpenseRequest.company_id == current_user.company_id)
         
     query = query.filter(ExpenseRequest.status == "approved")
@@ -886,7 +886,7 @@ def export_advances_pdf(
         joinedload(AdvanceRequest.expenses)
     )
     
-    if current_user.role != "super_admin":
+    if current_user.company_id:
         query = query.filter(AdvanceRequest.company_id == current_user.company_id)
         
     if status:
@@ -1145,7 +1145,7 @@ def export_rejections_pdf(
         joinedload(ExpenseRequest.approval_logs)
     ).filter(ExpenseRequest.status == "rejected")
     
-    if current_user.role != "super_admin":
+    if current_user.company_id:
         query = query.filter(ExpenseRequest.company_id == current_user.company_id)
         
     if from_date:
@@ -1374,7 +1374,7 @@ def export_attachments_zip(
     
     query = db.query(Attachment).join(ExpenseRequest, Attachment.expense_request_id == ExpenseRequest.id)
     
-    if current_user.role != "super_admin":
+    if current_user.company_id:
         query = query.filter(Attachment.company_id == current_user.company_id)
         
     if from_date:

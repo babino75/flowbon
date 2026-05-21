@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "../../../contexts/AuthContext";
 import { api } from "../../../lib/api";
 
-const roles = ["employee", "manager", "accountant", "admin"];
+const roles = ["employee", "manager", "accountant", "cashier", "admin"];
 
 export default function InviteUserPage() {
   const { user } = useAuth();

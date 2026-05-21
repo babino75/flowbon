@@ -9,4 +9,6 @@ from app.models.approval_log import ApprovalLog
 from app.models.notification import Notification, NotificationPreferences
 from app.models.fiscal_year import FiscalYear
 from app.models.suggestion import Suggestion
+from app.models.cash_register import CashRegister, CashTransaction
+from app.models.cash_source import CashSource
 

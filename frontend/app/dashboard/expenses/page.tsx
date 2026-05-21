@@ -10,6 +10,7 @@ const statusOptions = [
   "draft",
   "pending",
   "approved",
+  "approved_accounting",
   "rejected",
   "paid",
   "cancelled",

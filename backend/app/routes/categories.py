@@ -26,8 +26,8 @@ def add_category(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role not in ["admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent créer des catégories")
+    if current_user.role not in ["admin", "super_admin", "accountant"]:
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs et les comptables peuvent créer des catégories")
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="User has no company associated")
     
@@ -40,8 +40,8 @@ def update_category_route(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role not in ["admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent modifier les catégories")
+    if current_user.role not in ["admin", "super_admin", "accountant"]:
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs et les comptables peuvent modifier les catégories")
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="User has no company associated")
     

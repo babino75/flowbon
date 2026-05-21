@@ -13,6 +13,7 @@ class ExpenseStatus(str, Enum):
     draft = "draft"
     pending = "pending"
     approved = "approved"
+    approved_accounting = "approved_accounting"
     rejected = "rejected"
     paid = "paid"
     cancelled = "cancelled"

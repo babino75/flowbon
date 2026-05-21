@@ -15,6 +15,7 @@ from app.routes.advances import router as advances_router
 from app.routes.super_admin import router as super_admin_router
 from app.routes.fiscal_years import router as fiscal_years_router
 from app.routes.suggestions import router as suggestions_router
+from app.routes.cash_register import router as cash_registers_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -25,9 +26,17 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Configure CORS to automatically allow ngrok and localhost in development
+allow_origins = settings.frontend_urls
+allow_origin_regex = None
+
+if settings.app_env == "local":
+    allow_origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https?://.*\.ngrok-free\.app|https?://.*\.ngrok\.io"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.frontend_urls,
+    allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +55,7 @@ app.include_router(advances_router)
 app.include_router(super_admin_router)
 app.include_router(fiscal_years_router)
 app.include_router(suggestions_router)
+app.include_router(cash_registers_router)
 
 
 from fastapi.staticfiles import StaticFiles

@@ -13,9 +13,10 @@ type User = {
   is_active: boolean;
   is_backup_manager: boolean;
   is_backup_accountant: boolean;
+  is_backup_cashier?: boolean;
 };
 
-const roles = ["employee", "manager", "accountant", "admin"];
+const roles = ["employee", "manager", "accountant", "cashier", "admin"];
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -80,6 +81,19 @@ export default function UsersPage() {
         is_backup_accountant: !userRow.is_backup_accountant,
       });
       setActionMessage(`Droits de Comptable suppléant pour ${userRow.name} mis à jour.`);
+      await refreshUsers();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Impossible de mettre à jour les droits.");
+    }
+  };
+
+  const toggleBackupCashier = async (userRow: User) => {
+    try {
+      await api.updateUserRole(userRow.id, {
+        role: userRow.role,
+        is_backup_cashier: !userRow.is_backup_cashier,
+      });
+      setActionMessage(`Droits de Caissier suppléant pour ${userRow.name} mis à jour.`);
       await refreshUsers();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Impossible de mettre à jour les droits.");
@@ -217,6 +231,15 @@ export default function UsersPage() {
                                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                               />
                               <span>Comptable suppléant</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={!!userRow.is_backup_cashier}
+                                onChange={() => toggleBackupCashier(userRow)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span>Caissier suppléant</span>
                             </label>
                           </div>
                         )}

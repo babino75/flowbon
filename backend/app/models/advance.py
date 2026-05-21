@@ -12,8 +12,9 @@ from app.database import Base
 class AdvanceStatus(str, Enum):
     draft = "draft"
     pending = "pending"       # Waiting for manager's approval
-    approved = "approved"     # Approved by manager, waiting for accountant's disbursement
-    disbursed = "disbursed"   # Accountant disbursed cash, active/in use by employee
+    approved = "approved"     # Approved by manager, waiting for accountant's validation
+    approved_accounting = "approved_accounting" # Approved by accountant, waiting for cashier's disbursement
+    disbursed = "disbursed"   # Cashier disbursed cash, active/in use by employee
     rejected = "rejected"     # Rejected by manager or accountant
     reconciled = "reconciled"# All receipts submitted and change returned, closed.
 

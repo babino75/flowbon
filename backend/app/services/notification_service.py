@@ -13,6 +13,7 @@ from email.mime.multipart import MIMEMultipart
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.notification import Notification, NotificationPreferences
 from app.models.user import User
 
@@ -120,7 +121,7 @@ def _send_email(user_email: str, user_name: str, title: str, message: str, link:
     """Envoie un email via le SDK officiel Resend (Prod) ou SMTP Maildev (Dev)."""
     link_html = ""
     if link:
-        full_link = f"http://localhost:3000{link}"
+        full_link = f"{settings.frontend_url}{link}"
         link_html = f"""
         <p style="margin-top:24px">
           <a href="{full_link}"
@@ -209,12 +210,21 @@ def notify(
 
 
 def on_expense_submitted(db: Session, expense, submitter: User):
-    """Notifie les managers quand un employé soumet un bon."""
+    """Notifie en priorité les managers quand un employé soumet un bon. Si aucun manager n'existe, notifie l'admin."""
+    # D'abord, on cherche s'il y a des managers
     managers = db.query(User).filter(
         User.company_id == expense.company_id,
-        User.role.in_(["manager", "admin"]),
+        User.role == "manager",
         User.is_active == True,
     ).all()
+    
+    # S'il n'y a aucun manager, on alerte les admins
+    if not managers:
+        managers = db.query(User).filter(
+            User.company_id == expense.company_id,
+            User.role.in_(["admin", "super_admin"]),
+            User.is_active == True,
+        ).all()
 
     amount = float(expense.amount)
     currency = expense.currency
@@ -268,11 +278,12 @@ def on_expense_approved(db: Session, expense, approver: User):
 
 
 def on_expense_rejected(db: Session, expense, rejector: User, comment: Optional[str] = None):
-    """Notifie l'employé que son bon est refusé avec la raison."""
+    """Notifie l'employé que son bon est refusé avec la raison. Notifie aussi le manager si le refus vient d'en haut."""
     amount = float(expense.amount)
     currency = expense.currency
     reason = f" Motif : {comment}" if comment else ""
 
+    # Notifier l'employé qui a soumis le bon
     notify(
         db=db,
         company_id=expense.company_id,
@@ -283,6 +294,29 @@ def on_expense_rejected(db: Session, expense, rejector: User, comment: Optional[
         link=f"/dashboard/expenses/{expense.id}",
         pref_key="notify_on_rejected",
     )
+
+    # Si le rejet a été fait par le comptable, le caissier ou l'admin, on veut informer le manager qui avait validé
+    if rejector.role in ["accountant", "cashier", "admin", "super_admin"]:
+        from app.models.approval_log import ApprovalLog
+        # Trouver le log d'approbation (manager)
+        approval_log = db.query(ApprovalLog).filter(
+            ApprovalLog.expense_request_id == expense.id,
+            ApprovalLog.action == "approved"
+        ).order_by(ApprovalLog.created_at.desc()).first()
+        
+        if approval_log:
+            manager = db.query(User).filter(User.id == approval_log.user_id).first()
+            if manager and manager.id != rejector.id:
+                notify(
+                    db=db,
+                    company_id=expense.company_id,
+                    user_id=manager.id,
+                    notif_type="expense_rejected",
+                    title="Bon que vous avez validé refusé ❌",
+                    message=f"Le bon de {amount:,.0f} {currency} (soumis par {expense.user.name}) que vous aviez validé a été finalement refusé par {rejector.name}.{reason}",
+                    link=f"/dashboard/expenses/{expense.id}",
+                    pref_key="notify_on_rejected",
+                )
 
 
 def on_expense_paid(db: Session, expense, payer: User):
@@ -302,9 +336,45 @@ def on_expense_paid(db: Session, expense, payer: User):
     )
 
 
+def on_expense_approved_accounting(db: Session, expense, accountant: User):
+    """Notifie l'employé et les caissiers que le bon a été visé et approuvé financièrement."""
+    amount = float(expense.amount)
+    currency = expense.currency
+
+    # Notifier l'employé
+    notify(
+        db=db,
+        company_id=expense.company_id,
+        user_id=expense.user_id,
+        notif_type="expense_approved_accounting",
+        title="Bon de dépense visé par la comptabilité 🧾",
+        message=f"Votre bon de {amount:,.0f} {currency} a été validé financièrement par {accountant.name} et est en attente de décaissement par la caisse.",
+        link=f"/dashboard/expenses/{expense.id}",
+        pref_key="notify_on_approved",
+    )
+
+    # Notifier les caissiers
+    cashiers = db.query(User).filter(
+        User.company_id == expense.company_id,
+        User.role == "cashier",
+        User.is_active == True,
+    ).all()
+    for cashier in cashiers:
+        notify(
+            db=db,
+            company_id=expense.company_id,
+            user_id=cashier.id,
+            notif_type="expense_approved_accounting",
+            title="Nouveau décaissement en attente 💵",
+            message=f"Un bon de {amount:,.0f} {currency} soumis par {expense.user.name} a été visé par la comptabilité et est prêt pour le décaissement.",
+            link=f"/dashboard/expenses/{expense.id}",
+            pref_key="notify_on_approved",
+        )
+
+
 def send_password_reset_email(user_email: str, token: str) -> bool:
     """Envoie un email de réinitialisation de mot de passe."""
-    reset_link = f"http://localhost:3000/reset-password?token={token}"
+    reset_link = f"{settings.frontend_url}/reset-password?token={token}"
     title = "Réinitialisation de votre mot de passe"
     html_body = f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px;background:#f9fafb;border-radius:16px">
@@ -356,5 +426,70 @@ def send_password_reset_email(user_email: str, token: str) -> bool:
         
     # 3. Console log
     logger.info(f"[RESET EMAIL CONSOLE] To: {user_email} | Link: {reset_link}")
+    return True
+
+
+def send_invitation_email(user_email: str, company_name: str, inviter_name: str, role: str, token: str) -> bool:
+    """Envoie un email d'invitation à rejoindre une entreprise."""
+    invite_link = f"{settings.frontend_url}/register-invite?token={token}"
+    role_fr = {
+        "admin": "Administrateur",
+        "manager": "Manager",
+        "accountant": "Comptable",
+        "cashier": "Caissier",
+        "employee": "Employé"
+    }.get(role, role)
+
+    title = f"Invitation à rejoindre {company_name}"
+    html_body = f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px;background:#f9fafb;border-radius:16px">
+      <div style="background:white;border-radius:12px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+        <div style="margin-bottom:20px">
+          <span style="font-size:24px;font-weight:900;background:linear-gradient(to right,#4f46e5,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent">FlowBon</span>
+        </div>
+        <h2 style="color:#1e1b4b;margin:0 0 12px 0;font-size:18px">{{title}}</h2>
+        <p style="color:#374151;font-size:15px;line-height:1.6;margin:0">
+          Bonjour,<br/><br/>
+          <b>{{inviter_name}}</b> vous invite à rejoindre l'espace de travail de l'entreprise <b>{{company_name}}</b> sur FlowBon, en tant que <b>{{role_fr}}</b>.
+        </p>
+        <p style="margin-top:24px">
+          <a href="{{invite_link}}"
+             style="display:inline-block;padding:12px 28px;background:#4f46e5;color:white;
+                    text-decoration:none;border-radius:10px;font-weight:bold;font-size:14px">
+            ✨ Accepter l'invitation
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;margin-top:20px">
+          Ce lien est valable pour une durée de 7 jours. Si vous ne connaissez pas l'expéditeur, ignorez ce message.
+        </p>
+      </div>
+      <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:20px">
+        FlowBon — Gestion des dépenses simplifiée
+      </p>
+    </div>
+    """
+    
+    # 1. Resend en prod
+    if RESEND_API_KEY and APP_ENV == "production":
+        try:
+            import resend
+            params = {
+                "from": FROM_EMAIL,
+                "to": [user_email],
+                "subject": f"[FlowBon] {title}",
+                "html": html_body,
+            }
+            resend.Emails.send(params)
+            logger.info(f"✅ Invitation email sent via Resend to {user_email}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️  Resend invitation email failed: {e}")
+            
+    # 2. SMTP fallback
+    if SMTP_HOST:
+        return _send_email_smtp(user_email, title, html_body)
+        
+    # 3. Console log
+    logger.info(f"[INVITE EMAIL CONSOLE] To: {user_email} | Link: {invite_link}")
     return True
 

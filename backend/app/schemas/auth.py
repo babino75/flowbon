@@ -8,6 +8,7 @@ class RegisterSchema(BaseModel):
     password: str = Field(min_length=8, description="Le mot de passe doit faire au moins 8 caracteres")
     role: str = "employee"
     company_name: Optional[str] = None
+    company_type: Optional[str] = "profit"
 
     @validator("password")
     def password_strength(cls, value: str) -> str:

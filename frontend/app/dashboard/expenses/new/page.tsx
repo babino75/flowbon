@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../../lib/api";
 import { translateStatus } from "../../../lib/utils";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const statuses = ["draft", "pending"];
 
 export default function NewExpensePage() {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     amount: "",
     tax_amount: "",
@@ -182,12 +184,38 @@ export default function NewExpensePage() {
             <p className="mt-2 text-slate-600">Créez un brouillon ou soumettez directement une dépense.</p>
           </div>
 
+          {!activeFiscalYear && !loading && (
+            <div className="mb-8 rounded-2xl bg-rose-50/70 border border-rose-100 p-5 backdrop-blur-sm shadow-sm flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 animate-fade-in">
+              <div className="flex gap-4">
+                <div className="flex items-center justify-center w-12 h-12 bg-white rounded-full text-rose-500 shadow-sm border border-rose-100 flex-shrink-0">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3l18 18"></path></svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-rose-800 mb-1">Aucun exercice comptable actif</h3>
+                  <p className="text-xs font-medium text-rose-600/80 leading-relaxed">
+                    Il est impossible de créer une nouvelle dépense sans un exercice comptable ouvert pour la période actuelle.
+                  </p>
+                </div>
+              </div>
+              {user?.role === "admin" || user?.role === "super_admin" || user?.role === "accountant" ? (
+                <Link href="/dashboard/accounting" className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-white text-rose-600 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-50 transition-colors shadow-sm">
+                  <span>⚙️</span> Ouvrir l'exercice
+                </Link>
+              ) : (
+                <p className="shrink-0 text-xs font-semibold text-slate-500 italic px-2 py-2 text-center sm:text-right">
+                  Veuillez contacter votre administrateur.
+                </p>
+              )}
+            </div>
+          )}
+
           {error && <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 mb-6">{error}</div>}
           {message && <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-700 mb-6">{message}</div>}
 
           <form className="space-y-6" onSubmit={handleSubmit}>
-            <div className="grid gap-6 sm:grid-cols-2">
-              <label className="block">
+            <fieldset disabled={!activeFiscalYear} className="space-y-6 group">
+              <div className="grid gap-6 sm:grid-cols-2">
+                <label className="block">
                 <span className="text-sm font-medium text-slate-700">Montant Total (TTC)</span>
                 <input
                   type="number"
@@ -341,6 +369,7 @@ export default function NewExpensePage() {
                 {loading ? "Création..." : "Créer le bon"}
               </button>
             </div>
+            </fieldset>
           </form>
         </div>
       </div>

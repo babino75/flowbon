@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -13,6 +13,7 @@ from app.models.advance import AdvanceRequest, AdvanceStatus
 from app.models.expense import ExpenseRequest, ExpenseStatus
 from app.schemas.advance import AdvanceCreateSchema, AdvanceResponse, AdvanceUpdateSchema
 from app.core.dependencies import get_current_active_user
+from app.services.fiscal_year_service import get_active_fiscal_year
 
 router = APIRouter(prefix="/advances", tags=["advances"])
 
@@ -62,6 +63,14 @@ def create_advance(
     currency = advance_in.currency or getattr(company, "currency", "XOF")
     if not currency:
         currency = "XOF"
+
+    # Validation rigoureuse : Exercice comptable actif obligatoire
+    active_fy = get_active_fiscal_year(db, current_user.company_id)
+    if not active_fy:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aucun exercice comptable actif n'est ouvert pour cette entreprise."
+        )
 
     submitted_at = datetime.utcnow() if advance_in.status == AdvanceStatus.pending.value else None
 
@@ -154,8 +163,8 @@ def approve_advance(
     return advance
 
 
-@router.post("/{advance_id}/disburse", response_model=AdvanceResponse)
-def disburse_advance(
+@router.post("/{advance_id}/validate-financial", response_model=AdvanceResponse)
+def validate_financial_advance(
     advance_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -164,17 +173,96 @@ def disburse_advance(
     if not advance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
 
-    # Only accountant, admin or backup accountant can disburse
     is_authorized = current_user.role in ["accountant", "admin", "super_admin"] or current_user.is_backup_accountant
     if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les comptables et administrateurs peuvent remettre les fonds")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les comptables et administrateurs peuvent viser financièrement une avance")
 
-    # Anti-self disbursement
     if current_user.id == advance.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas vous remettre des fonds à vous-même")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas viser votre propre demande d'avance")
 
     if advance.status != AdvanceStatus.approved.value:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Les fonds ne peuvent être remis que pour des demandes approuvées")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La demande d'avance doit être approuvée par le manager avant d'être visée par la comptabilité")
+
+    company = db.query(Company).filter(Company.id == advance.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    if not company.has_separate_cashier:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La séparation des rôles n'est pas active. Vous devez décaisser directement.")
+
+    advance.status = AdvanceStatus.approved_accounting.value
+    db.commit()
+    db.refresh(advance)
+    
+    calculate_advance_sums(advance)
+    return advance
+
+
+@router.post("/{advance_id}/disburse", response_model=AdvanceResponse)
+def disburse_advance(
+    advance_id: str,
+    caisse_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    advance = get_advance_for_company(db, advance_id, current_user)
+    if not advance:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
+
+    company = db.query(Company).filter(Company.id == advance.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    if company.has_separate_cashier:
+        is_authorized = current_user.role in ["cashier", "admin", "super_admin"] or getattr(current_user, "is_backup_cashier", False)
+        if not is_authorized:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé pour les décaissements (Rôle Caissier requis)")
+        if advance.status != AdvanceStatus.approved_accounting.value:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'avance doit être visée par la comptabilité avant décaissement")
+    else:
+        is_authorized = current_user.role in ["accountant", "admin", "super_admin"] or current_user.is_backup_accountant
+        if not is_authorized:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les comptables et administrateurs peuvent remettre les fonds")
+        if advance.status != AdvanceStatus.approved.value:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Les fonds ne peuvent être remis que pour des demandes approuvées")
+
+    # Cash register integration
+    from app.models.cash_register import CashRegister, CashTransaction
+    caisse = None
+    if caisse_id:
+        try:
+            c_uuid = UUID(caisse_id)
+            caisse = db.query(CashRegister).filter(
+                CashRegister.id == c_uuid,
+                CashRegister.company_id == current_user.company_id
+            ).first()
+            if not caisse:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La caisse spécifiée est introuvable")
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de caisse invalide")
+    else:
+        # Auto-select the first/default caisse of the company if exists
+        caisse = db.query(CashRegister).filter(CashRegister.company_id == current_user.company_id).first()
+
+    if caisse:
+        if caisse.current_balance < advance.amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour décaisser cette avance de {advance.amount} {advance.currency}."
+            )
+        
+        # Create EXIT cash transaction
+        tx = CashTransaction(
+            cash_register_id=caisse.id,
+            type="EXIT",
+            amount=advance.amount,
+            source="advance_payout",
+            description=f"Décaissement de l'avance n° {advance.id} à {advance.user.name if hasattr(advance, 'user') else ''}",
+            reference_id=advance.id,
+            created_by=current_user.id
+        )
+        caisse.current_balance -= advance.amount
+        db.add(tx)
 
     advance.status = AdvanceStatus.disbursed.value
     advance.disbursed_at = datetime.utcnow()
@@ -225,10 +313,18 @@ def reconcile_advance(
     if not advance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
 
-    # Only accountant, admin or backup accountant can close/reconcile
-    is_authorized = current_user.role in ["accountant", "admin", "super_admin"] or current_user.is_backup_accountant
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les comptables et administrateurs peuvent clôturer les avances")
+    company = db.query(Company).filter(Company.id == advance.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
+
+    if company.has_separate_cashier:
+        is_authorized = current_user.role in ["cashier", "admin", "super_admin"] or getattr(current_user, "is_backup_cashier", False)
+        if not is_authorized:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les caissiers et administrateurs peuvent clôturer les avances")
+    else:
+        is_authorized = current_user.role in ["accountant", "admin", "super_admin"] or current_user.is_backup_accountant
+        if not is_authorized:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les comptables et administrateurs peuvent clôturer les avances")
 
     if advance.status != AdvanceStatus.disbursed.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seules les avances en cours d'utilisation peuvent être clôturées")
@@ -242,8 +338,55 @@ def reconcile_advance(
         if exp.status not in [ExpenseStatus.rejected.value, ExpenseStatus.cancelled.value]:
             exp.status = ExpenseStatus.paid.value
 
+    # Cash register return / surplus logic
+    calculate_advance_sums(advance)
+    reliquat = advance.balance
+    
+    from app.models.cash_register import CashRegister, CashTransaction
+    # Find origin transaction to identify target cash register
+    orig_tx = db.query(CashTransaction).filter(
+        CashTransaction.reference_id == advance.id,
+        CashTransaction.source == "advance_payout"
+    ).first()
+
+    if orig_tx:
+        caisse = db.query(CashRegister).filter(CashRegister.id == orig_tx.cash_register_id).first()
+        if caisse:
+            if reliquat > 0:
+                # Employee returns leftover cash to drawer -> ENTRY
+                tx_entry = CashTransaction(
+                    cash_register_id=caisse.id,
+                    type="ENTRY",
+                    amount=reliquat,
+                    source="refund",
+                    description=f"Restitution du reliquat de l'avance n° {advance.id} par {advance.user.name}",
+                    reference_id=advance.id,
+                    created_by=current_user.id
+                )
+                caisse.current_balance += reliquat
+                db.add(tx_entry)
+            elif reliquat < 0:
+                # Company reimburses employee for the excess spent -> EXIT
+                surplus = abs(reliquat)
+                # Check if caisse has sufficient balance
+                if caisse.current_balance >= surplus:
+                    tx_exit = CashTransaction(
+                        cash_register_id=caisse.id,
+                        type="EXIT",
+                        amount=surplus,
+                        source="refund",
+                        description=f"Remboursement du surplus de l'avance n° {advance.id} à {advance.user.name}",
+                        reference_id=advance.id,
+                        created_by=current_user.id
+                    )
+                    caisse.current_balance -= surplus
+                    db.add(tx_exit)
+
     db.commit()
     db.refresh(advance)
     
     calculate_advance_sums(advance)
     return advance
+
+
+

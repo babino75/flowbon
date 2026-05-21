@@ -70,6 +70,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Auto-logout after 15 minutes of inactivity
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutes en millisecondes
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      if (authState.user) {
+        timeoutId = setTimeout(() => {
+          logout();
+        }, INACTIVITY_LIMIT);
+      }
+    };
+
+    if (authState.user) {
+      resetTimer();
+
+      const events = ['mousemove', 'mousedown', 'keypress', 'touchmove', 'scroll'];
+      const handleActivity = () => resetTimer();
+
+      events.forEach((event) => window.addEventListener(event, handleActivity));
+
+      return () => {
+        clearTimeout(timeoutId);
+        events.forEach((event) => window.removeEventListener(event, handleActivity));
+      };
+    }
+  }, [authState.user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <AuthContext.Provider value={{ user: authState.user, loading: authState.loading, login, register, logout }}>
       {children}

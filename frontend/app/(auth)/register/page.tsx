@@ -11,9 +11,11 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [companyName, setCompanyName] = useState("");
-  // Default to employee
-  const [role, setRole] = useState("employee"); 
+  const [companyType, setCompanyType] = useState<"profit" | "non_profit">("profit");
+  // Rôle forcé à 'admin' en production pour créer une entreprise
+  const role = "admin"; 
   
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,10 +29,15 @@ export default function RegisterPage() {
       return;
     }
     
+    if (!companyName.trim()) {
+      setError("Le nom de l'entreprise est obligatoire");
+      return;
+    }
+    
     setLoading(true);
     try {
-      await register({ name, email, password, role, company_name: role === "admin" ? companyName : undefined });
-      // The context's register method handles the redirect to /dashboard via auto-login
+      await register({ name, email, password, role, company_name: companyName, company_type: companyType });
+      // Le contexte register gère la redirection vers /dashboard
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || "Une erreur est survenue lors de l'inscription");
@@ -96,50 +103,83 @@ export default function RegisterPage() {
               <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="password">
                 Mot de passe (min 8 caractères)
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none block w-full px-4 py-3 border border-gray-600 bg-gray-800/50 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  className="appearance-none block w-full px-4 py-3 pr-12 border border-gray-600 bg-gray-800/50 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white transition-colors"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="role">
-                Rôle de démonstration
+              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="companyName">
+                Nom de l'entreprise
               </label>
-              <select
-                id="role"
-                name="role"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="appearance-none block w-full px-4 py-3 border border-gray-600 bg-gray-800/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-              >
-                <option value="employee">Employé</option>
-                <option value="manager">Manager</option>
-                <option value="accountant">Comptable</option>
-                <option value="admin">Administrateur</option>
-              </select>
+              <input
+                id="companyName"
+                name="companyName"
+                type="text"
+                required
+                className="appearance-none block w-full px-4 py-3 border border-gray-600 bg-gray-800/50 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                placeholder="Nom de votre entreprise"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
             </div>
+            
             {role === "admin" && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="companyName">
-                  Nom de l'entreprise
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Statut Juridique
                 </label>
-                <input
-                  id="companyName"
-                  name="companyName"
-                  type="text"
-                  required
-                  className="appearance-none block w-full px-4 py-3 border border-gray-600 bg-gray-800/50 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder="Nom de votre entreprise"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setCompanyType("profit")}
+                    className={`px-4 py-3 border rounded-xl flex flex-col items-center justify-center transition-all ${
+                      companyType === "profit" 
+                        ? "border-indigo-500 bg-indigo-500/20 text-indigo-300" 
+                        : "border-gray-600 bg-gray-800/50 text-gray-400 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="font-medium mb-1">À but lucratif</span>
+                    <span className="text-xs text-center opacity-80">Sociétés, Startups (SYSCOHADA)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyType("non_profit")}
+                    className={`px-4 py-3 border rounded-xl flex flex-col items-center justify-center transition-all ${
+                      companyType === "non_profit" 
+                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-300" 
+                        : "border-gray-600 bg-gray-800/50 text-gray-400 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="font-medium mb-1">À but non lucratif</span>
+                    <span className="text-xs text-center opacity-80">ONG, Associations (SYCEBNL)</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

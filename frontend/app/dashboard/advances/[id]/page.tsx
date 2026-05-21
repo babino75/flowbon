@@ -9,7 +9,8 @@ import { api } from "../../../lib/api";
 const ADVANCE_STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   pending: "En attente de validation",
-  approved: "Approuvé (À décaisser)",
+  approved: "Approuvé opérationnellement",
+  approved_accounting: "Approuvé financièrement",
   disbursed: "Fonds remis (En cours)",
   rejected: "Rejeté",
   reconciled: "Clôturé (Rapproché)",
@@ -19,6 +20,7 @@ const ADVANCE_STATUS_BADGES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 border-gray-200",
   pending: "bg-amber-50 text-amber-800 border-amber-200 animate-pulse",
   approved: "bg-blue-50 text-blue-800 border-blue-200",
+  approved_accounting: "bg-teal-50 text-teal-800 border-teal-200",
   disbursed: "bg-indigo-50 text-indigo-800 border-indigo-200",
   rejected: "bg-red-50 text-red-800 border-red-200",
   reconciled: "bg-emerald-50 text-emerald-800 border-emerald-200",
@@ -45,9 +47,11 @@ const EXPENSE_STATUS_LABELS: Record<string, string> = {
 export default function AdvanceDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const user = auth.user as any;
   const [advance, setAdvance] = useState<any | null>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [company, setCompany] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -118,9 +122,22 @@ export default function AdvanceDetailPage() {
   const advanceAmount = parseFloat(advance.amount);
 
   // Authorizations
+  // Authorizations
   const canApprove = (user?.role && ["manager", "admin", "super_admin"].includes(user.role) || user?.is_backup_manager) && !isOwner;
-  const canDisburse = (user?.role && ["accountant", "admin", "super_admin"].includes(user.role) || user?.is_backup_accountant) && !isOwner;
-  const canReconcile = (user?.role && ["accountant", "admin", "super_admin"].includes(user.role) || user?.is_backup_accountant);
+  
+  const canValidateFinancial = company?.has_separate_cashier && advance.status === "approved" && (user?.role && ["accountant", "admin", "super_admin"].includes(user.role) || user?.is_backup_accountant) && !isOwner;
+  
+  const canDisburse = user?.role && (
+    company?.has_separate_cashier
+      ? (advance.status === "approved_accounting" && (["cashier", "admin", "super_admin"].includes(user.role) || user?.is_backup_cashier))
+      : (advance.status === "approved" && (["accountant", "admin", "super_admin"].includes(user.role) || user?.is_backup_accountant))
+  ) && !isOwner;
+  
+  const canReconcile = user?.role && (
+    company?.has_separate_cashier
+      ? (["cashier", "admin", "super_admin"].includes(user.role) || user?.is_backup_cashier)
+      : (["accountant", "admin", "super_admin"].includes(user.role) || user?.is_backup_accountant)
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -287,13 +304,13 @@ export default function AdvanceDetailPage() {
                 <>
                   <button
                     onClick={() => handleAction(api.rejectAdvance, "La demande d'avance a été rejetée.")}
-                    disabled={actionLoading || (!canApprove && !canDisburse)}
+                    disabled={actionLoading || !canApprove}
                     className="px-4 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40"
                   >
                     Rejeter
                   </button>
                   <button
-                    onClick={() => handleAction(api.approveAdvance, "La demande d'avance a été approuvée avec succès. En attente de remise des fonds.")}
+                    onClick={() => handleAction(api.approveAdvance, "La demande d'avance a été approuvée avec succès.")}
                     disabled={actionLoading || !canApprove}
                     className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-40 shadow-sm"
                   >
@@ -302,12 +319,32 @@ export default function AdvanceDetailPage() {
                 </>
               )}
 
-              {/* Disbursement controls (Accountant/Admin) */}
-              {advance.status === "approved" && (
+              {/* Financial validation controls (Accountant/Admin) */}
+              {advance.status === "approved" && company?.has_separate_cashier && (
                 <>
                   <button
                     onClick={() => handleAction(api.rejectAdvance, "La demande d'avance a été rejetée.")}
-                    disabled={actionLoading || (!canApprove && !canDisburse)}
+                    disabled={actionLoading || (!canApprove && !canValidateFinancial)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40"
+                  >
+                    Rejeter
+                  </button>
+                  <button
+                    onClick={() => handleAction(api.validateFinancialAdvance, "La demande d'avance a été validée financièrement. En attente de décaissement par le caissier.")}
+                    disabled={actionLoading || !canValidateFinancial}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors disabled:opacity-40 shadow-sm"
+                  >
+                    {isOwner ? "Auto-validation financière bloquée" : "Viser (Validation Financière)"}
+                  </button>
+                </>
+              )}
+
+              {/* Disbursement controls (Cashier/Accountant/Admin) */}
+              {((advance.status === "approved" && !company?.has_separate_cashier) || (advance.status === "approved_accounting" && company?.has_separate_cashier)) && (
+                <>
+                  <button
+                    onClick={() => handleAction(api.rejectAdvance, "La demande d'avance a été rejetée.")}
+                    disabled={actionLoading || !canDisburse}
                     className="px-4 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40"
                   >
                     Rejeter
@@ -322,7 +359,7 @@ export default function AdvanceDetailPage() {
                 </>
               )}
 
-              {/* Reconciliation closing controls (Accountant/Admin) */}
+              {/* Reconciliation closing controls (Accountant/Cashier/Admin) */}
               {advance.status === "disbursed" && (
                 <button
                   onClick={() => handleAction(api.reconcileAdvance, "L'avance a été rapprochée et clôturée définitivement.")}

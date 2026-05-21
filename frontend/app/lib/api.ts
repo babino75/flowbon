@@ -29,6 +29,7 @@ export async function fetchWithAuth(
   }
 
   const config: RequestInit = {
+    cache: "no-store",
     ...options,
     headers,
     credentials: "include",
@@ -214,6 +215,12 @@ export const api = {
     });
   },
 
+  validateFinancialAdvance: async (advanceId: string) => {
+    return fetchWithAuth(`/advances/${advanceId}/validate-financial`, {
+      method: "POST",
+    });
+  },
+
   disburseAdvance: async (advanceId: string) => {
     return fetchWithAuth(`/advances/${advanceId}/disburse`, {
       method: "POST",
@@ -284,6 +291,10 @@ export const api = {
 
   payExpense: async (expenseId: string) => {
     return fetchWithAuth(`/expenses/${expenseId}/mark-as-paid`, { method: "POST" });
+  },
+
+  validateFinancialExpense: async (expenseId: string) => {
+    return fetchWithAuth(`/expenses/${expenseId}/validate-financial`, { method: "POST" });
   },
 
   addExpenseComment: async (expenseId: string, data: { comment: string }) => {
@@ -723,6 +734,74 @@ export const api = {
 
   deleteSuggestion: async (id: string) => {
     return fetchWithAuth(`/suggestions/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // ─── Caisses (Cash Register) ───────────────────────────────────────────────
+  listCaisses: async () => {
+    return fetchWithAuth("/caisses");
+  },
+
+  createCaisse: async (data: { name: string; currency?: string; cashier_ids?: string[] }) => {
+    return fetchWithAuth("/caisses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  assignCashiersToCaisse: async (caisseId: string, cashierIds: string[]) => {
+    return fetchWithAuth(`/caisses/${caisseId}/cashiers`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cashier_ids: cashierIds }),
+    });
+  },
+
+  getCaisseTransactions: async (caisseId: string) => {
+    return fetchWithAuth(`/caisses/${caisseId}/transactions`);
+  },
+
+  replenishCaisse: async (caisseId: string, data: { amount: number; description?: string; source?: string; attachment_url?: string; attachment_name?: string }) => {
+    return fetchWithAuth(`/caisses/${caisseId}/replenish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  withdrawCaisse: async (caisseId: string, data: { amount: number; description?: string; source?: string; attachment_url?: string; attachment_name?: string }) => {
+    return fetchWithAuth(`/caisses/${caisseId}/withdraw`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  uploadCashJustificatif: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetchWithAuth("/caisses/upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  listCashSources: async () => {
+    return fetchWithAuth("/caisses/sources");
+  },
+
+  createCashSource: async (data: { name: string; type?: string }) => {
+    return fetchWithAuth("/caisses/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCashSource: async (sourceId: string) => {
+    return fetchWithAuth(`/caisses/sources/${sourceId}`, {
       method: "DELETE",
     });
   },

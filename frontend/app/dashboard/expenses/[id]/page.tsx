@@ -12,6 +12,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const { user: authUser } = useAuth();
   const [user, setUser] = useState<any>(null);
   const [expense, setExpense] = useState<any | null>(null);
+  const [company, setCompany] = useState<any | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,16 +44,18 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     setLoading(true);
     setError(null);
     try {
-      const [expenseData, logsData, userData, categoriesData] = await Promise.all([
+      const [expenseData, logsData, userData, categoriesData, companyData] = await Promise.all([
         api.getExpense(params.id),
         api.getExpenseLogs(params.id).catch(() => []),
         api.getMe().catch(() => null),
-        api.getCategories(true).catch(() => [])
+        api.getCategories(true).catch(() => []),
+        api.getCompany().catch(() => null)
       ]);
       setExpense(expenseData);
       setLogs(logsData as any[]);
       setUser(userData);
       setCategories(categoriesData as any[]);
+      setCompany(companyData);
       setFormData({
         amount: String((expenseData as any).amount ?? ""),
         tax_amount: String((expenseData as any).tax_amount ?? "0.00"),
@@ -180,6 +183,16 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     } catch (err: any) { setError(err.message || "Erreur lors du refus"); } finally { setSaving(false); }
   };
 
+  const handleValidateFinancial = async () => {
+    if (!expense) return;
+    setSaving(true); setError(null); setMessage(null);
+    try {
+      await api.validateFinancialExpense(params.id);
+      setMessage("Bon de dépense visé financièrement et validé.");
+      await loadExpense();
+    } catch (err: any) { setError(err.message || "Erreur lors de la validation financière"); } finally { setSaving(false); }
+  };
+
   const handleMarkPaid = async () => {
     if (!expense) return;
     setSaving(true); setError(null); setMessage(null);
@@ -249,8 +262,18 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   );
   const canSubmit = expense && ["draft", "rejected"].includes(expense.status) && (isOwner || isAdmin);
   const canCancel = expense && expense.status === "pending" && (isOwner || isAdmin);
+  
   const canApprove = expense?.status === "pending" && user?.role && ["manager", "admin", "super_admin"].includes(user.role) && user?.id !== expense.user_id;
-  const canPay = expense?.status === "approved" && user?.role && ["accountant", "admin", "super_admin"].includes(user.role);
+  
+  const canValidateFinancial = company?.has_separate_cashier && expense?.status === "approved" && user?.role && (["accountant", "admin", "super_admin"].includes(user.role) || user.is_backup_accountant) && user?.id !== expense.user_id;
+  
+  const canPay = user?.role && (
+    company?.has_separate_cashier
+      ? (expense?.status === "approved_accounting" && (["cashier", "admin", "super_admin"].includes(user.role) || user.is_backup_cashier))
+      : (expense?.status === "approved" && (["accountant", "admin", "super_admin"].includes(user.role) || user.is_backup_accountant))
+  ) && user?.id !== expense.user_id;
+  
+  const canReject = canApprove || canValidateFinancial || (expense?.status === "approved" && !company?.has_separate_cashier && user?.role && ["accountant", "admin", "super_admin"].includes(user.role) && user?.id !== expense.user_id);
 
   const getActionIcon = (action: string) => {
     switch(action) {
@@ -341,11 +364,14 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
               {canCancel && (
                 <button type="button" onClick={handleCancel} disabled={saving} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors disabled:opacity-50">Annuler</button>
               )}
+              {canReject && (
+                <button type="button" onClick={() => setShowRejectModal(true)} disabled={saving} className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50">Refuser</button>
+              )}
               {canApprove && (
-                <>
-                  <button type="button" onClick={() => setShowRejectModal(true)} disabled={saving} className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50">Refuser</button>
-                  <button type="button" onClick={handleApprove} disabled={saving} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">Approuver</button>
-                </>
+                <button type="button" onClick={handleApprove} disabled={saving} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">Approuver</button>
+              )}
+              {canValidateFinancial && (
+                <button type="button" onClick={handleValidateFinancial} disabled={saving} className="rounded-2xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-700 transition-colors disabled:opacity-50">Viser (Comptabilité)</button>
               )}
               {canPay && (
                 <button type="button" onClick={handleMarkPaid} disabled={saving} className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50">Marquer comme payé</button>
