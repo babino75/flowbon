@@ -418,8 +418,8 @@ export default function CaissePage() {
               {caisses.map((c) => {
                 const meta = ACCOUNT_TYPE_META[c.account_type] || ACCOUNT_TYPE_META.CASH;
                 return (
-                  <button key={c.id} onClick={() => { setSelectedCaisse(c); fetchTransactions(c.id); }}
-                    className={`rounded-2xl border-2 p-5 text-left transition-all shadow-sm hover:shadow-md ${
+                  <div key={c.id} onClick={() => { setSelectedCaisse(c); fetchTransactions(c.id); }}
+                    className={`rounded-2xl border-2 p-5 text-left transition-all shadow-sm hover:shadow-md cursor-pointer ${
                       selectedCaisse?.id === c.id ? "border-indigo-500 bg-indigo-50/50" : "border-slate-200 bg-white hover:border-indigo-300"
                     }`}>
                     <div className="flex items-center justify-between mb-2">
@@ -447,13 +447,13 @@ export default function CaissePage() {
                     {c.cashiers && c.cashiers.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-100 flex -space-x-2 overflow-hidden">
                         {c.cashiers.map((cashier: any) => (
-                          <div key={cashier.id} title={cashier.name} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                          <div key={cashier.id} title={cashier.name} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700">
                             {cashier.name.charAt(0).toUpperCase()}
                           </div>
                         ))}
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -463,7 +463,7 @@ export default function CaissePage() {
               <div className="mb-6 rounded-2xl bg-rose-50/70 border border-rose-100 p-5 backdrop-blur-sm shadow-sm flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 animate-fade-in">
                 <div className="flex gap-4">
                   <div className="flex items-center justify-center w-12 h-12 bg-white rounded-full text-rose-500 shadow-sm border border-rose-100 flex-shrink-0">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3l18 18"></path></svg>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-rose-800 mb-1">Aucun exercice comptable actif</h3>
@@ -473,7 +473,7 @@ export default function CaissePage() {
                   </div>
                 </div>
                 {user?.role === "admin" || user?.role === "super_admin" || user?.role === "accountant" ? (
-                  <Link href="/dashboard/accounting" className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-white text-rose-600 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-50 transition-colors shadow-sm">
+                  <Link href="/dashboard/accounting" className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-white text-rose-600 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-50 transition-colors">
                     <span>⚙️</span> Ouvrir l'exercice
                   </Link>
                 ) : (
@@ -737,7 +737,7 @@ export default function CaissePage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowReplenishModal(false)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
               <button onClick={handleReplenish} disabled={saving || !txAmount || !attachmentUrl || uploadingFile}
-                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-sm">
+                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95">
                 {saving ? "Enregistrement..." : "✅ Valider l'entrée"}
               </button>
             </div>
@@ -809,7 +809,7 @@ export default function CaissePage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowWithdrawModal(false)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
               <button onClick={handleWithdraw} disabled={saving || !txAmount || !attachmentUrl || uploadingFile}
-                className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-sm">
+                className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95">
                 {saving ? "Enregistrement..." : "⚠️ Confirmer le retrait"}
               </button>
             </div>
@@ -855,7 +855,7 @@ export default function CaissePage() {
                 <button onClick={() => setShowAssignModal(false)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
                   Annuler
                 </button>
-                <button onClick={handleAssignCashiers} disabled={saving} className="px-5 py-2.5 text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
+                <button onClick={handleAssignCashiers} disabled={saving} className="px-5 py-2.5 text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl shadow-sm transition-colors flex items-center gap-2">
                   {saving && <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />}
                   Enregistrer
                 </button>
