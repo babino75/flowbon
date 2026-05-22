@@ -300,13 +300,28 @@ def withdraw_cash(
 
 # ─── Gestion des justificatifs de caisse ─────────────────────────────────────
 
-@router.post("/upload", response_model=dict)
+@router.post("/{caisse_id}/upload", response_model=dict)
 def upload_cash_justificatif(
+    caisse_id: str,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
+    """
+    Upload un justificatif de caisse avec vérification d'assignation.
+    
+    ✅ FIX: Vérifie que le caissier est assigné à la caisse avant de permettre l'upload
+    """
     if current_user.role not in ["admin", "super_admin", "cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+    
+    # ✅ NOUVEAU: Vérifier que le caissier est assigné à la caisse
+    caisse = get_cash_register_for_company(db, caisse_id, current_user)
+    if not caisse:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Vous n'êtes pas autorisé à téléverser des justificatifs pour cette caisse. Seuls les caissiers assignés peuvent le faire."
+        )
     
     upload_dir = Path(settings.uploads_dir)
     file_size = validate_upload(file)
