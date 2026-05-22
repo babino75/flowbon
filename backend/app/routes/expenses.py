@@ -612,11 +612,25 @@ def mark_expense_as_paid(
                 ).first()
                 if not caisse:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La caisse spécifiée est introuvable")
+                
+                # ✅ FIX: Vérifier que le caissier est assigné à cette caisse (si c'est un caissier)
+                if current_user.role == "cashier" and current_user not in caisse.cashiers:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Vous n'êtes pas autorisé à utiliser la caisse '{caisse.name}'. Seuls les caissiers assignés peuvent effectuer des paiements."
+                    )
             except ValueError:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de caisse invalide")
         else:
             # Auto-select the first/default caisse of the company if exists
             caisse = db.query(CashRegister).filter(CashRegister.company_id == current_user.company_id).first()
+            
+            # ✅ FIX: Vérifier que le caissier est assigné à la caisse par défaut (si c'est un caissier)
+            if caisse and current_user.role == "cashier" and current_user not in caisse.cashiers:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Vous n'êtes pas autorisé à utiliser la caisse par défaut '{caisse.name}'. Vous devez sélectionner une caisse à laquelle vous êtes assigné."
+                )
 
         if caisse:
             if caisse.current_balance < expense.amount:
