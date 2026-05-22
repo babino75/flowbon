@@ -36,7 +36,8 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AccountingPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"categories" | "sources" | "fiscal_years">("categories");
+  //const [activeTab, setActiveTab] = useState<"categories" | "sources" | "fiscal_years">("categories");
+  const [activeTab, setActiveTab] = useState<"sources" | "fiscal_years">("sources");
 
   // Shared state
   const [loading, setLoading] = useState(true);
@@ -114,9 +115,9 @@ export default function AccountingPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (activeTab === "categories") loadCategories();
-    else if (activeTab === "sources") loadSources();
+    if (activeTab === "sources") loadSources();
     else if (activeTab === "fiscal_years") loadFiscalYears();
+    //else if (activeTab === "fiscal_years") loadFiscalYears();
   }, [activeTab, user]);
 
   // Categories Handlers
@@ -273,14 +274,7 @@ export default function AccountingPage() {
             🗺️ Plan Comptable Unifié
             <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-md font-bold">NEW</span>
           </Link>
-          <button
-            onClick={() => setActiveTab("categories")}
-            className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
-              activeTab === "categories" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            🗂️ Catégories
-          </button>
+
           <button
             onClick={() => setActiveTab("sources")}
             className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
@@ -300,7 +294,7 @@ export default function AccountingPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === "categories" && (
+        {/*activeTab === "categories" && (
           <div className="space-y-6">
             <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
               <h2 className="text-xl font-bold text-slate-900 mb-2">Ajouter une catégorie</h2>
@@ -361,7 +355,7 @@ export default function AccountingPage() {
               )}
             </div>
           </div>
-        )}
+        )*/}
 
         {activeTab === "sources" && (
           <div className="space-y-6">
