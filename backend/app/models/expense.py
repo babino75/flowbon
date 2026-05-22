@@ -31,14 +31,17 @@ class ExpenseCategory(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     company = relationship("Company")
+    accounting_mapping = relationship("ExpenseCategoryAccountingMapping", back_populates="category", uselist=False)
 
 
 class ExpenseRequest(Base):
     __tablename__ = "expense_requests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    reference_number = Column(String, nullable=False, unique=True, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True, index=True)
     amount = Column(Numeric(12, 2), nullable=False)
     tax_amount = Column(Numeric(12, 2), nullable=True, default=0.0)
     currency = Column(String, nullable=False)
@@ -48,13 +51,22 @@ class ExpenseRequest(Base):
     expense_date = Column(Date, nullable=False)
     submitted_at = Column(DateTime, nullable=True)
     advance_id = Column(UUID(as_uuid=True), ForeignKey("advance_requests.id"), nullable=True)
+    rejection_comment = Column(Text, nullable=True)
     fiscal_year_id = Column(UUID(as_uuid=True), ForeignKey("fiscal_years.id"), nullable=True, index=True)
+    
+    # Phase 4
+    accounting_account_id = Column(UUID(as_uuid=True), ForeignKey("accounting_accounts.id"), nullable=True, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     attachments = relationship("Attachment", back_populates="expense", cascade="all, delete-orphan")
     approval_logs = relationship("ApprovalLog", back_populates="expense", cascade="all, delete-orphan", order_by="ApprovalLog.created_at")
     user = relationship("User")
+    department = relationship("Department")
+    project = relationship("Project", back_populates="expense_requests")
+    accounting_account = relationship("AccountingAccount")
     category_rel = relationship("ExpenseCategory")
     advance = relationship("AdvanceRequest", back_populates="expenses")
     fiscal_year = relationship("FiscalYear", back_populates="expenses")

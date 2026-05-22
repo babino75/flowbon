@@ -14,6 +14,7 @@ from app.models.expense import ExpenseRequest, ExpenseStatus
 from app.schemas.advance import AdvanceCreateSchema, AdvanceResponse, AdvanceUpdateSchema
 from app.core.dependencies import get_current_active_user
 from app.services.fiscal_year_service import get_active_fiscal_year
+from app.services.reference_service import generate_reference
 
 router = APIRouter(prefix="/advances", tags=["advances"])
 
@@ -75,6 +76,7 @@ def create_advance(
     submitted_at = datetime.utcnow() if advance_in.status == AdvanceStatus.pending.value else None
 
     advance = AdvanceRequest(
+        reference_number=generate_reference(db, current_user.company_id, "ADV"),
         company_id=current_user.company_id,
         user_id=current_user.id,
         amount=advance_in.amount,
@@ -251,13 +253,14 @@ def disburse_advance(
                 detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour décaisser cette avance de {advance.amount} {advance.currency}."
             )
         
-        # Create EXIT cash transaction
+        # Create EXIT cash transaction with PAY reference
         tx = CashTransaction(
+            reference_number=generate_reference(db, current_user.company_id, "PAY"),
             cash_register_id=caisse.id,
             type="EXIT",
             amount=advance.amount,
             source="advance_payout",
-            description=f"Décaissement de l'avance n° {advance.id} à {advance.user.name if hasattr(advance, 'user') else ''}",
+            description=f"Décaissement de l'avance {advance.reference_number or advance.id} à {advance.user.name if hasattr(advance, 'user') else ''}",
             reference_id=advance.id,
             created_by=current_user.id
         )
@@ -355,11 +358,12 @@ def reconcile_advance(
             if reliquat > 0:
                 # Employee returns leftover cash to drawer -> ENTRY
                 tx_entry = CashTransaction(
+                    reference_number=generate_reference(db, current_user.company_id, "PAY"),
                     cash_register_id=caisse.id,
                     type="ENTRY",
                     amount=reliquat,
                     source="refund",
-                    description=f"Restitution du reliquat de l'avance n° {advance.id} par {advance.user.name}",
+                    description=f"Restitution du reliquat de l'avance {advance.reference_number or advance.id} par {advance.user.name}",
                     reference_id=advance.id,
                     created_by=current_user.id
                 )
@@ -371,11 +375,12 @@ def reconcile_advance(
                 # Check if caisse has sufficient balance
                 if caisse.current_balance >= surplus:
                     tx_exit = CashTransaction(
+                        reference_number=generate_reference(db, current_user.company_id, "PAY"),
                         cash_register_id=caisse.id,
                         type="EXIT",
                         amount=surplus,
                         source="refund",
-                        description=f"Remboursement du surplus de l'avance n° {advance.id} à {advance.user.name}",
+                        description=f"Remboursement du surplus de l'avance {advance.reference_number or advance.id} à {advance.user.name}",
                         reference_id=advance.id,
                         created_by=current_user.id
                     )

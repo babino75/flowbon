@@ -155,6 +155,7 @@ export default function ExpensesPage() {
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Référence</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Employé</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
@@ -173,6 +174,11 @@ export default function ExpensesPage() {
                   ) : (
                     expenses.map((expense) => (
                       <tr key={expense.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-mono font-bold tracking-tight">
+                            {expense.reference_number || '—'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{expense.expense_date}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {expense.user ? (

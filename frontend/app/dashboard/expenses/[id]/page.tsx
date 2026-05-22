@@ -24,10 +24,12 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     tax_amount: "",
     currency: "",
     category_id: "",
+    accounting_account_id: "",
     description: "",
     expense_date: "",
   });
   const [categories, setCategories] = useState<any[]>([]);
+  const [accountingAccounts, setAccountingAccounts] = useState<any[]>([]);
   const [catsLoading, setCatsLoading] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   
@@ -44,23 +46,26 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     setLoading(true);
     setError(null);
     try {
-      const [expenseData, logsData, userData, categoriesData, companyData] = await Promise.all([
+      const [expenseData, logsData, userData, categoriesData, companyData, accountsData] = await Promise.all([
         api.getExpense(params.id),
         api.getExpenseLogs(params.id).catch(() => []),
         api.getMe().catch(() => null),
         api.getCategories(true).catch(() => []),
-        api.getCompany().catch(() => null)
+        api.getCompany().catch(() => null),
+        api.listAccountingAccounts().catch(() => [])
       ]);
       setExpense(expenseData);
       setLogs(logsData as any[]);
       setUser(userData);
       setCategories(categoriesData as any[]);
       setCompany(companyData);
+      setAccountingAccounts(accountsData as any[]);
       setFormData({
         amount: String((expenseData as any).amount ?? ""),
         tax_amount: String((expenseData as any).tax_amount ?? "0.00"),
         currency: (expenseData as any).currency ?? "EUR",
         category_id: (expenseData as any).category_id ?? "",
+        accounting_account_id: (expenseData as any).accounting_account_id ?? "",
         description: (expenseData as any).description ?? "",
         expense_date: (expenseData as any).expense_date ?? "",
       });
@@ -96,6 +101,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
         tax_amount: Number(formData.tax_amount) || 0,
         currency: formData.currency,
         category_id: formData.category_id,
+        accounting_account_id: formData.accounting_account_id || undefined,
         description: formData.description,
         expense_date: formData.expense_date,
       });
@@ -256,10 +262,12 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
   const isOwner = user && expense && user.id === expense.user_id;
   const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
+  const isAccountant = user?.role === "accountant";
   const updatable = expense && (
     isAdmin ||
     (isOwner && ["draft", "pending", "rejected"].includes(expense.status))
   );
+  const canEditAccounting = expense && (isAdmin || isAccountant);
   const canSubmit = expense && ["draft", "rejected"].includes(expense.status) && (isOwner || isAdmin);
   const canCancel = expense && expense.status === "pending" && (isOwner || isAdmin);
   
@@ -345,13 +353,31 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
             Dépenses
           </Link>
           <span className="text-slate-300">/</span>
-          <span className="text-sm font-medium text-slate-400">Détail ({expense.id.slice(0, 8)})</span>
+          <span className="text-sm font-medium text-slate-400">Détail ({expense.reference_number || expense.id.slice(0, 8)})</span>
         </div>
 
         <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Bon de dépense</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-slate-900">
+                  Bon {expense.reference_number || 'de dépense'}
+                </h1>
+                {expense.reference_number && (
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      navigator.clipboard.writeText(expense.reference_number);
+                    }}
+                    title="Copier la référence"
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <p className="mt-2 text-slate-600">Détail et actions pour ce bon de dépense.</p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -407,6 +433,9 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 <p><span className="font-semibold">Catégorie :</span> {expense.category}</p>
                 <p><span className="font-semibold">Date :</span> {expense.expense_date}</p>
                 <p><span className="font-semibold">Soumis le :</span> {expense.submitted_at ? new Date(expense.submitted_at).toLocaleDateString() : "—"}</p>
+                {expense.project_id && (
+                  <p><span className="font-semibold">Projet :</span> {expense.project?.name || "Oui"}</p>
+                )}
               </div>
             </div>
 
@@ -459,6 +488,31 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                   </select>
                 )}
               </label>
+
+              {/* Accounting Account Override (Accountant / Admin only) */}
+              {(user?.role === "accountant" || user?.role === "admin" || user?.role === "super_admin") && (
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Compte Comptable d'imputation (Surcharge)</span>
+                  {catsLoading ? (
+                    <div className="mt-2 text-slate-500 text-sm">Chargement...</div>
+                  ) : (
+                    <select
+                      value={formData.accounting_account_id}
+                      onChange={(e) => handleChange("accounting_account_id", e.target.value)}
+                      className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
+                    >
+                      <option value="">-- Compte par défaut de la catégorie --</option>
+                      {accountingAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.account_number} - {acc.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="mt-1 text-xs text-slate-500">Par défaut, le compte mappé à la catégorie sera utilisé.</p>
+                </label>
+              )}
+
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Date de dépense</span>
                 <input type="date" value={formData.expense_date} onChange={(e) => handleChange("expense_date", e.target.value)} disabled={!updatable} className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100" />
@@ -467,7 +521,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 <span className="text-sm font-medium text-slate-700">Description</span>
                 <textarea value={formData.description} onChange={(e) => handleChange("description", e.target.value)} disabled={!updatable} rows={4} className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 disabled:bg-slate-100" />
               </label>
-              {updatable && (
+              {(updatable || canEditAccounting) && (
                 <button type="submit" disabled={saving} className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors disabled:opacity-50">
                   {saving ? "Enregistrement..." : "Enregistrer les modifications"}
                 </button>

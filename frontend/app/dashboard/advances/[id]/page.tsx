@@ -163,7 +163,28 @@ export default function AdvanceDetailPage() {
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${ADVANCE_STATUS_BADGES[advance.status] || ADVANCE_STATUS_BADGES.draft} mb-3`}>
               {ADVANCE_STATUS_LABELS[advance.status] || advance.status}
             </span>
-            <h1 className="text-2xl font-bold text-slate-900">{advance.description || "Demande d'avance"}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-900">
+                {advance.reference_number || "Avance de caisse"}
+              </h1>
+              {advance.reference_number && (
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(advance.reference_number);
+                  }}
+                  title="Copier la référence"
+                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {advance.description && (
+              <p className="text-sm text-slate-700 mt-2 font-medium">{advance.description}</p>
+            )}
             <p className="text-xs text-slate-500 mt-1">
               Soumis par <span className="font-semibold text-slate-700">{advance.user?.name}</span> ({advance.user?.email}) le {new Date(advance.created_at).toLocaleDateString("fr-FR")}
             </p>

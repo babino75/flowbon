@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
-import { api } from "../../lib/api";
+import { api, setToken } from "../../lib/api";
 
 export default function CompanyPage() {
   const { user } = useAuth();
@@ -12,6 +12,12 @@ export default function CompanyPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState("general");
+  const [myCompanies, setMyCompanies] = useState<any[]>([]);
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
+  const [showCreateClientModal, setShowCreateClientModal] = useState(false);
+  const [clientFormData, setClientFormData] = useState({ name: "", currency: "XOF" });
 
   const [formData, setFormData] = useState({
     name: "",
@@ -46,6 +52,12 @@ export default function CompanyPage() {
         setError("Impossible de charger les informations de l'entreprise.");
       })
       .finally(() => setLoading(false));
+
+    setLoadingWorkspaces(true);
+    api.getMyCompanies()
+      .then((data) => setMyCompanies(data as any[]))
+      .catch(() => {})
+      .finally(() => setLoadingWorkspaces(false));
   }, [user]);
 
   const handleChange = (field: string, value: string | number | boolean) => {
@@ -68,6 +80,48 @@ export default function CompanyPage() {
       } else {
         setError("Impossible de mettre à jour l'entreprise.");
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientFormData.name.trim()) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await api.createClientCompany({
+        name: clientFormData.name,
+        currency: clientFormData.currency,
+        country: "Non défini",
+        city: "Non défini",
+        phone: "",
+        email: user?.email || ""
+      });
+      setMessage(`L'espace client "${clientFormData.name}" a été créé avec succès.`);
+      setShowCreateClientModal(false);
+      setClientFormData({ name: "", currency: "XOF" });
+      const comps = await api.getMyCompanies();
+      setMyCompanies(comps as any[]);
+    } catch (err: any) {
+      setError(err.message || "Erreur lors de la création de l'espace client.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSwitchCompany = async (companyId: string) => {
+    setSaving(true);
+    try {
+      const res = await api.switchCompany(companyId) as any;
+      if (res.access_token) {
+        if (setToken) setToken(res.access_token);
+        window.location.href = "/dashboard";
+      }
+    } catch (err) {
+      alert("Erreur lors du changement d'espace.");
     } finally {
       setSaving(false);
     }
@@ -102,11 +156,22 @@ export default function CompanyPage() {
           </Link>
         </div>
 
-        <div className="mb-6 flex border-b border-slate-200">
+        <div className="mb-6 flex gap-6 border-b border-slate-200">
           <button
-            className="px-6 py-3 text-sm font-semibold transition-all border-b-2 border-indigo-600 text-indigo-600"
+            onClick={() => setActiveTab("general")}
+            className={`px-2 py-3 text-sm font-semibold transition-all border-b-2 ${
+              activeTab === "general" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
           >
             Informations générales
+          </button>
+          <button
+            onClick={() => setActiveTab("workspaces")}
+            className={`px-2 py-3 text-sm font-semibold transition-all border-b-2 ${
+              activeTab === "workspaces" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Mes Espaces Clients
           </button>
         </div>
 
@@ -120,7 +185,7 @@ export default function CompanyPage() {
             <div className="flex justify-center py-16">
               <div className="animate-spin h-12 w-12 rounded-full border-b-2 border-indigo-600"></div>
             </div>
-          ) : (
+          ) : activeTab === "general" ? (
             <form className="space-y-6" onSubmit={handleSave}>
               {error && <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">{error}</div>}
               {message && <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-700">{message}</div>}
@@ -237,9 +302,109 @@ export default function CompanyPage() {
                 </button>
               </div>
             </form>
+          ) : (
+            <div>
+              {error && <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 mb-6">{error}</div>}
+              {message && <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-700 mb-6">{message}</div>}
+
+              <div className="flex items-center justify-between mb-6">
+                <p className="text-sm text-slate-600">
+                  Gérez vos différents espaces ou créez un nouvel espace client.
+                </p>
+                <button
+                  onClick={() => setShowCreateClientModal(true)}
+                  className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                >
+                  + Nouvel espace client
+                </button>
+              </div>
+
+              {loadingWorkspaces ? (
+                <div className="py-8 text-center text-slate-500 text-sm">Chargement de vos espaces...</div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {myCompanies.map((c) => (
+                    <div key={c.company.id} className={`p-5 rounded-2xl border ${c.company.id === company?.id ? "border-indigo-500 bg-indigo-50/30 shadow-sm" : "border-slate-200 bg-white"}`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="font-bold text-slate-900">{c.company.name}</h3>
+                        {c.company.id === company?.id && (
+                          <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full">Actif</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1">Rôle: <span className="font-medium">{c.role}</span></p>
+                      <p className="text-xs text-slate-500 mb-4">Abonnement: {c.company.subscription_plan} ({c.company.subscription_status})</p>
+                      
+                      {c.company.id !== company?.id && (
+                        <button
+                          onClick={() => handleSwitchCompany(c.company.id)}
+                          disabled={saving}
+                          className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          Basculer vers cet espace
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
+
+      {/* Modal Création Client */}
+      {showCreateClientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Nouvel espace client</h3>
+            <p className="text-sm text-slate-500 mb-6">Créez un nouvel espace de travail isolé pour gérer une autre entreprise.</p>
+            
+            <form onSubmit={handleCreateClient} className="space-y-4">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Nom de l'entreprise</span>
+                <input
+                  type="text"
+                  required
+                  value={clientFormData.name}
+                  onChange={(e) => setClientFormData({ ...clientFormData, name: e.target.value })}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                  placeholder="Ex: Client ABC"
+                />
+              </label>
+              
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Devise principale</span>
+                <select
+                  value={clientFormData.currency}
+                  onChange={(e) => setClientFormData({ ...clientFormData, currency: e.target.value })}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                >
+                  <option value="XOF">XOF - Franc CFA</option>
+                  <option value="EUR">EUR - Euro</option>
+                  <option value="USD">USD - Dollar</option>
+                </select>
+              </label>
+
+              <div className="flex justify-end gap-3 mt-8">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateClientModal(false)}
+                  className="rounded-xl px-4 py-2 font-medium text-slate-600 hover:bg-slate-100"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !clientFormData.name.trim()}
+                  className="rounded-xl bg-indigo-600 px-6 py-2 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving ? "Création..." : "Créer l'espace"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

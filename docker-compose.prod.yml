@@ -1,0 +1,82 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flowbon
+      POSTGRES_PASSWORD: flowbon123
+      POSTGRES_DB: flowbon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - flowbon
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowbon -d flowbon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_started
+    volumes:
+      - backend_uploads:/app/uploads
+    environment:
+      DATABASE_URL: postgresql://flowbon:flowbon123@db:5432/flowbon
+      APP_NAME: FlowBon
+      APP_ENV: production
+      FRONTEND_URL: http://localhost
+      FRONTEND_URLS: http://localhost,http://127.0.0.1
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your-smtp-user
+      SMTP_PASSWORD: your-smtp-password
+    networks:
+      - flowbon
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=/api
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+      - INTERNAL_API_URL=http://backend:8000
+    networks:
+      - flowbon
+
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+    networks:
+      - flowbon
+
+volumes:
+  pgdata:
+  backend_uploads:
+
+networks:
+  flowbon:
+    driver: bridge

@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+from app.schemas.department import UserDepartmentResponse
+
 class UserBase(BaseModel):
     name: str
     email: EmailStr
@@ -20,6 +22,8 @@ class UserCreate(UserBase):
 
 class UserRoleUpdate(BaseModel):
     role: str
+    scope_type: Optional[str] = None
+    scope_id: Optional[UUID] = None
     is_backup_manager: Optional[bool] = None
     is_backup_accountant: Optional[bool] = None
     is_backup_cashier: Optional[bool] = None
@@ -32,6 +36,9 @@ class UserResponse(UserBase):
     company_id: Optional[UUID] = None
     invited_by: Optional[UUID] = None
     is_active: bool
+    scope_type: str
+    scope_id: Optional[UUID] = None
+    department_links: list[UserDepartmentResponse] = []
     created_at: datetime
     updated_at: datetime
 

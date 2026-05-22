@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+// In the browser, use the relative /api path (handled by Nginx). 
+// On the server (Next.js SSR), use the internal Docker network URL.
+const API_URL = typeof window !== "undefined" 
+  ? (process.env.NEXT_PUBLIC_API_URL === "http://localhost:8000" ? "/api" : (process.env.NEXT_PUBLIC_API_URL || "/api"))
+  : (process.env.INTERNAL_API_URL || "http://backend:8000");
 
 let inMemoryToken: string | null = null;
 
@@ -53,7 +57,15 @@ export async function fetchWithAuth(
         headers,
       });
     } else {
+      // Both access and refresh tokens are invalid
+      // Only hard-redirect if we had an in-memory token (i.e. session expired mid-session)
+      // On a cold visit with no token, just throw so AuthContext can handle gracefully
+      const hadActiveToken = !!inMemoryToken;
       setToken(null);
+      if (hadActiveToken && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
     }
   }
 
@@ -104,6 +116,15 @@ export const api = {
 
   getCompany: async () => {
     return fetchWithAuth("/companies/me");
+  },
+
+  createClientCompany: async (data: Record<string, unknown>) => {
+    const response = await fetchWithAuth("/companies/client", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return response;
   },
 
   updateCompany: async (data: Record<string, unknown>) => {
@@ -743,7 +764,7 @@ export const api = {
     return fetchWithAuth("/caisses");
   },
 
-  createCaisse: async (data: { name: string; currency?: string; cashier_ids?: string[] }) => {
+  createCaisse: async (data: { name: string; currency?: string; account_type?: string; bank_name?: string; account_number?: string; accounting_account_id?: string; cashier_ids?: string[] }) => {
     return fetchWithAuth("/caisses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -803,6 +824,100 @@ export const api = {
   deleteCashSource: async (sourceId: string) => {
     return fetchWithAuth(`/caisses/sources/${sourceId}`, {
       method: "DELETE",
+    });
+  },
+
+  // ─── Départements ────────────────────────────────────────────────────────────
+
+  getDepartments: async () => {
+    return fetchWithAuth("/departments");
+  },
+
+  createDepartment: async (data: { name: string; description?: string }) => {
+    return fetchWithAuth("/departments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateDepartment: async (id: string, data: { name?: string; description?: string; is_active?: boolean }) => {
+    return fetchWithAuth(`/departments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateUserDepartments: async (userId: string, departmentIds: string[], primaryDepartmentId?: string) => {
+    const params = new URLSearchParams();
+    departmentIds.forEach(id => params.append("department_ids", id));
+    if (primaryDepartmentId) params.set("primary_department_id", primaryDepartmentId);
+    return fetchWithAuth(`/users/${userId}/departments?${params.toString()}`, {
+      method: "PUT",
+    });
+  },
+
+  // ─── Accounting ───────────────────────────────────────────────
+  listAccountingAccounts: async () => {
+    return fetchWithAuth("/accounting/accounts");
+  },
+
+  getAccountingPlan: async () => {
+    return fetchWithAuth("/accounting/plan");
+  },
+
+  createAccountingPlanItem: async (data: { account_code: string; account_name: string; category_name: string; category_description?: string; account_type?: string }) => {
+    return fetchWithAuth("/accounting/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deletePlanItemMapping: async (categoryId: string) => {
+    return fetchWithAuth(`/accounting/plan/item?category_id=${categoryId}`, {
+      method: "DELETE",
+    });
+  },
+
+  listLedgerEntries: async () => {
+    return fetchWithAuth("/accounting/ledger");
+  },
+
+  // ─── Projects ─────────────────────────────────────────────────
+  listProjects: async (includeInactive = false) => {
+    return fetchWithAuth(`/projects?include_inactive=${includeInactive}`);
+  },
+
+  createProject: async (data: { name: string; code?: string; description?: string }) => {
+    return fetchWithAuth("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateProject: async (projectId: string, data: { name?: string; code?: string; description?: string; is_active?: boolean }) => {
+    return fetchWithAuth(`/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteProject: async (projectId: string) => {
+    return fetchWithAuth(`/projects/${projectId}`, { method: "DELETE" });
+  },
+
+  // ─── Multi-Company ─────────────────────────────────────────────
+  getMyCompanies: async () => {
+    return fetchWithAuth("/users/me/companies");
+  },
+
+  switchCompany: async (companyId: string) => {
+    return fetchWithAuth(`/auth/switch-company?company_id=${companyId}`, {
+      method: "POST",
     });
   },
 };

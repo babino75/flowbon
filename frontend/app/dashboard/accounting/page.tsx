@@ -266,13 +266,20 @@ export default function AccountingPage() {
 
         {/* Navigation Tabs */}
         <div className="mb-6 flex border-b border-slate-200 overflow-x-auto">
+          <Link
+            href="/dashboard/accounting/plan"
+            className="px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap border-transparent text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5"
+          >
+            🗺️ Plan Comptable Unifié
+            <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-md font-bold">NEW</span>
+          </Link>
           <button
             onClick={() => setActiveTab("categories")}
             className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
               activeTab === "categories" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
             }`}
           >
-            🗂️ Plan Comptable
+            🗂️ Catégories
           </button>
           <button
             onClick={() => setActiveTab("sources")}

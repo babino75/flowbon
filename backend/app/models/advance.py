@@ -23,6 +23,7 @@ class AdvanceRequest(Base):
     __tablename__ = "advance_requests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    reference_number = Column(String, nullable=True, unique=True, index=True)  # Ex: ADV-2026-0012
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)

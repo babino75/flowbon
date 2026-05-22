@@ -276,3 +276,123 @@ def get_category_by_id(db: Session, category_id, company_id):
         ExpenseCategory.company_id == company_id
     ).first()
 
+
+def list_accounting_accounts(db: Session, company_id, only_active: bool = False):
+    from app.models.accounting import AccountingAccount
+
+    query = db.query(AccountingAccount).filter(AccountingAccount.company_id == company_id)
+    if only_active:
+        query = query.filter(AccountingAccount.is_active == True)
+    return query.order_by(AccountingAccount.code.asc()).all()
+
+
+def create_accounting_account(db: Session, company_id, code: str, name: str, description: str = None):
+    import uuid
+    from app.models.accounting import AccountingAccount
+
+    account = AccountingAccount(
+        id=uuid.uuid4(),
+        company_id=company_id,
+        code=code,
+        name=name,
+        description=description,
+        is_active=True,
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+def get_accounting_account_by_id(db: Session, account_id, company_id):
+    from app.models.accounting import AccountingAccount
+
+    return db.query(AccountingAccount).filter(
+        AccountingAccount.id == account_id,
+        AccountingAccount.company_id == company_id
+    ).first()
+
+
+def get_category_account_mapping(db: Session, category_id, company_id):
+    from app.models.accounting import ExpenseCategoryAccountingMapping
+
+    return db.query(ExpenseCategoryAccountingMapping).filter(
+        ExpenseCategoryAccountingMapping.expense_category_id == category_id,
+        ExpenseCategoryAccountingMapping.company_id == company_id,
+    ).first()
+
+
+def set_category_account_mapping(db: Session, category_id, accounting_account_id, company_id):
+    import uuid
+    from app.models.accounting import ExpenseCategoryAccountingMapping
+
+    mapping = get_category_account_mapping(db, category_id, company_id)
+    if mapping:
+        mapping.accounting_account_id = accounting_account_id
+    else:
+        mapping = ExpenseCategoryAccountingMapping(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            expense_category_id=category_id,
+            accounting_account_id=accounting_account_id,
+        )
+        db.add(mapping)
+    db.commit()
+    db.refresh(mapping)
+    return mapping
+
+
+def delete_category_account_mapping(db: Session, category_id, company_id):
+    from app.models.accounting import ExpenseCategoryAccountingMapping
+
+    mapping = get_category_account_mapping(db, category_id, company_id)
+    if mapping:
+        db.delete(mapping)
+        db.commit()
+    return None
+
+
+def list_departments(db: Session, company_id):
+    from app.models.department import Department
+
+    return db.query(Department).filter(Department.company_id == company_id).order_by(Department.name.asc()).all()
+
+
+def create_department(db: Session, company_id, name: str, description: str = None):
+    import uuid
+    from app.models.department import Department
+
+    dept = Department(
+        id=uuid.uuid4(),
+        company_id=company_id,
+        name=name,
+        description=description,
+        is_active=True,
+    )
+    db.add(dept)
+    db.commit()
+    db.refresh(dept)
+    return dept
+
+
+def get_department_by_id(db: Session, dept_id, company_id):
+    from app.models.department import Department
+
+    return db.query(Department).filter(
+        Department.id == dept_id,
+        Department.company_id == company_id
+    ).first()
+
+
+def update_department_service(db: Session, dept, update_data: dict):
+    for field, value in update_data.items():
+        setattr(dept, field, value)
+    db.commit()
+    db.refresh(dept)
+    return dept
+
+
+def delete_department_service(db: Session, dept):
+    db.delete(dept)
+    db.commit()
+

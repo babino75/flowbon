@@ -12,9 +12,20 @@ interface CashRegister {
   name: string;
   currency: string;
   current_balance: number;
+  account_type: string;
+  bank_name?: string | null;
+  account_number?: string | null;
+  is_active: boolean;
   created_at: string;
   cashiers?: any[];
 }
+
+const ACCOUNT_TYPE_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
+  CASH:         { label: "Caisse Physique",  icon: "💵", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
+  BANK:         { label: "Compte Bancaire",  icon: "🏦", color: "text-blue-700",    bg: "bg-blue-50 border-blue-200" },
+  MOBILE_MONEY: { label: "Mobile Money",     icon: "📱", color: "text-orange-700",  bg: "bg-orange-50 border-orange-200" },
+  WALLET:       { label: "Portefeuille",     icon: "👛", color: "text-purple-700",  bg: "bg-purple-50 border-purple-200" },
+};
 
 interface CashTransaction {
   id: string;
@@ -65,7 +76,14 @@ export default function CaissePage() {
   
   // Forms state
   const [newCaisseName, setNewCaisseName] = useState("");
+  const [newCaisseType, setNewCaisseType] = useState("CASH");
+  const [newBankName, setNewBankName] = useState("");
+  const [newAccountNumber, setNewAccountNumber] = useState("");
+  const [newAccountingAccountId, setNewAccountingAccountId] = useState("");
   const [txAmount, setTxAmount] = useState("");
+  
+  // Accounting state
+  const [accountingAccounts, setAccountingAccounts] = useState<any[]>([]);
   
   // Cashier Assignment state
   const [cashierUsers, setCashierUsers] = useState<any[]>([]);
@@ -101,9 +119,19 @@ export default function CaissePage() {
     const promises: Promise<any>[] = [fetchCaisses(), fetchSources(), fetchActiveFiscalYear()];
     if (isAdmin) {
       promises.push(fetchCashiers());
+      promises.push(fetchAccountingAccounts());
     }
     await Promise.all(promises);
     setLoading(false);
+  }
+
+  async function fetchAccountingAccounts() {
+    try {
+      const data = await api.listAccountingAccounts() as any[];
+      setAccountingAccounts(data.filter(a => a.is_active));
+    } catch {
+      console.error("Impossible de charger les comptes comptables.");
+    }
   }
 
   async function fetchCashiers() {
@@ -227,15 +255,23 @@ export default function CaissePage() {
     try {
       const created = await api.createCaisse({ 
         name: newCaisseName,
+        account_type: newCaisseType,
+        bank_name: newBankName || undefined,
+        account_number: newAccountNumber || undefined,
+        accounting_account_id: newAccountingAccountId || undefined,
         cashier_ids: selectedCashierIds
       }) as CashRegister;
       setCaisses((prev) => [created, ...prev]);
       setSelectedCaisse(created);
       setTransactions([]);
       setNewCaisseName("");
+      setNewCaisseType("CASH");
+      setNewBankName("");
+      setNewAccountNumber("");
+      setNewAccountingAccountId("");
       setSelectedCashierIds([]);
       setShowCreateModal(false);
-      setSuccessMsg("Caisse créée avec succès !");
+      setSuccessMsg("Compte de trésorerie créé avec succès !");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur lors de la création.");
     } finally {
@@ -377,37 +413,49 @@ export default function CaissePage() {
           </div>
         ) : (
           <>
-            {/* KPI Cards — Caisses */}
+            {/* KPI Cards — Comptes de Trésorerie */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-              {caisses.map((c) => (
-                <button key={c.id} onClick={() => { setSelectedCaisse(c); fetchTransactions(c.id); }}
-                  className={`rounded-2xl border-2 p-5 text-left transition-all shadow-sm hover:shadow-md ${selectedCaisse?.id === c.id ? "border-indigo-500 bg-indigo-50/50" : "border-slate-200 bg-white hover:border-indigo-300"}`}>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">💼 {c.name}</p>
-                  <p className={`text-2xl font-black ${Number(c.current_balance) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {Number(c.current_balance).toLocaleString("fr-FR")} <span className="text-base font-semibold">{c.currency}</span>
-                  </p>
-                  <div className="flex items-center justify-between mt-2">
-                    <p className="text-xs text-slate-400">Solde actuel en caisse</p>
-                    {isAdmin && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setCaisseToAssign(c); setSelectedCashierIds((c.cashiers || []).map((u: any) => u.id)); setShowAssignModal(true); }}
-                        className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
-                      >
-                        👥 Gérer caissiers
-                      </button>
-                    )}
-                  </div>
-                  {c.cashiers && c.cashiers.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex -space-x-2 overflow-hidden">
-                      {c.cashiers.map((cashier: any) => (
-                        <div key={cashier.id} title={cashier.name} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                          {cashier.name.charAt(0).toUpperCase()}
-                        </div>
-                      ))}
+              {caisses.map((c) => {
+                const meta = ACCOUNT_TYPE_META[c.account_type] || ACCOUNT_TYPE_META.CASH;
+                return (
+                  <button key={c.id} onClick={() => { setSelectedCaisse(c); fetchTransactions(c.id); }}
+                    className={`rounded-2xl border-2 p-5 text-left transition-all shadow-sm hover:shadow-md ${
+                      selectedCaisse?.id === c.id ? "border-indigo-500 bg-indigo-50/50" : "border-slate-200 bg-white hover:border-indigo-300"
+                    }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${meta.bg} ${meta.color}`}>
+                        {meta.icon} {meta.label}
+                      </span>
+                      {!c.is_active && <span className="text-xs text-slate-400 italic">Inactif</span>}
                     </div>
-                  )}
-                </button>
-              ))}
+                    <p className="text-sm font-bold text-slate-700 mb-1 truncate">{c.name}</p>
+                    {c.bank_name && <p className="text-xs text-slate-400 mb-1">{c.bank_name}{c.account_number ? ` · ${c.account_number}` : ""}</p>}
+                    <p className={`text-2xl font-black ${Number(c.current_balance) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      {Number(c.current_balance).toLocaleString("fr-FR")} <span className="text-base font-semibold">{c.currency}</span>
+                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-slate-400">Solde disponible</p>
+                      {isAdmin && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setCaisseToAssign(c); setSelectedCashierIds((c.cashiers || []).map((u: any) => u.id)); setShowAssignModal(true); }}
+                          className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
+                        >
+                          👥 Caissiers
+                        </button>
+                      )}
+                    </div>
+                    {c.cashiers && c.cashiers.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex -space-x-2 overflow-hidden">
+                        {c.cashiers.map((cashier: any) => (
+                          <div key={cashier.id} title={cashier.name} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                            {cashier.name.charAt(0).toUpperCase()}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Banner: Missing Active Fiscal Year */}
@@ -535,13 +583,62 @@ export default function CaissePage() {
         )}
       </div>
 
-      {/* Modal: Créer une caisse */}
+      {/* Modal: Créer un compte de trésorerie */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md animate-scale-up">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">🏦 Nouvelle Caisse</h2>
-            <input type="text" placeholder="Nom de la caisse (ex: Caisse Principale)" value={newCaisseName} onChange={(e) => setNewCaisseName(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none mb-4" />
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md animate-scale-up max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">🏦 Nouveau compte de trésorerie</h2>
+
+            {/* Type selection */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-600 mb-2">Type de compte</label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(ACCOUNT_TYPE_META).map(([key, meta]) => (
+                  <button key={key} type="button"
+                    onClick={() => setNewCaisseType(key)}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                      newCaisseType === key ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-indigo-200"
+                    }`}>
+                    <span>{meta.icon}</span> {meta.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <input type="text" placeholder="Nom du compte (ex: Caisse Principale, Compte BNI)" value={newCaisseName} onChange={(e) => setNewCaisseName(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none mb-3" />
+
+            {/* Bank-specific fields */}
+            {(newCaisseType === "BANK" || newCaisseType === "MOBILE_MONEY") && (
+              <div className="space-y-3 mb-3">
+                <input type="text"
+                  placeholder={newCaisseType === "BANK" ? "Nom de la banque (ex: BICIS, Ecobank)" : "Opérateur (ex: Wave, Orange Money)"}
+                  value={newBankName} onChange={(e) => setNewBankName(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <input type="text"
+                  placeholder={newCaisseType === "BANK" ? "N° de compte / IBAN" : "N° de téléphone"}
+                  value={newAccountNumber} onChange={(e) => setNewAccountNumber(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+            )}
+
+            {/* Accounting Account selection */}
+            {isAdmin && accountingAccounts.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-slate-600 mb-2">Compte comptable lié</label>
+                <select 
+                  value={newAccountingAccountId} 
+                  onChange={(e) => setNewAccountingAccountId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">Aucun compte lié</option>
+                  {accountingAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">Requis pour générer des écritures au Grand Livre.</p>
+              </div>
+            )}
             
             {isAdmin && cashierUsers.length > 0 && (
               <div className="mb-4">
@@ -554,11 +651,8 @@ export default function CaissePage() {
                         className="w-4 h-4 text-indigo-600 rounded border-slate-300"
                         checked={selectedCashierIds.includes(cashier.id)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedCashierIds([...selectedCashierIds, cashier.id]);
-                          } else {
-                            setSelectedCashierIds(selectedCashierIds.filter(id => id !== cashier.id));
-                          }
+                          if (e.target.checked) setSelectedCashierIds([...selectedCashierIds, cashier.id]);
+                          else setSelectedCashierIds(selectedCashierIds.filter(id => id !== cashier.id));
                         }}
                       />
                       <span className="text-sm font-medium text-slate-700">{cashier.name}</span>

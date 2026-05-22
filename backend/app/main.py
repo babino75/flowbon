@@ -10,12 +10,15 @@ from app.routes.expenses import router as expenses_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.exports import router as exports_router
 from app.routes.categories import router as categories_router
+from app.routes.accounting import router as accounting_router
+from app.routes.departments import router as departments_router
 from app.routes.notifications import router as notifications_router
 from app.routes.advances import router as advances_router
 from app.routes.super_admin import router as super_admin_router
 from app.routes.fiscal_years import router as fiscal_years_router
 from app.routes.suggestions import router as suggestions_router
 from app.routes.cash_register import router as cash_registers_router
+from app.routes.projects import router as projects_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -50,12 +53,15 @@ app.include_router(expenses_router)
 app.include_router(dashboard_router)
 app.include_router(exports_router)
 app.include_router(categories_router)
+app.include_router(accounting_router)
+app.include_router(departments_router)
 app.include_router(notifications_router)
 app.include_router(advances_router)
 app.include_router(super_admin_router)
 app.include_router(fiscal_years_router)
 app.include_router(suggestions_router)
 app.include_router(cash_registers_router)
+app.include_router(projects_router)
 
 
 from fastapi.staticfiles import StaticFiles

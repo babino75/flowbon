@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
@@ -11,6 +12,7 @@ from app.core.dependencies import get_current_active_user, get_db
 from app.models.attachment import Attachment
 from app.models.company import Company
 from app.models.expense import ExpenseRequest, ExpenseStatus
+from app.models.advance import AdvanceRequest
 from app.models.user import User
 from app.models.approval_log import ApprovalLog
 from app.schemas.attachment import AttachmentResponse
@@ -24,12 +26,54 @@ from app.services.tenant import (
 )
 from app.services import notification_service
 from app.services.fiscal_year_service import get_active_fiscal_year
+from app.services.reference_service import generate_reference
 from app.utils.files import MAX_ATTACHMENTS_PER_EXPENSE, ensure_upload_dir, save_upload, validate_upload
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
 UPLOAD_DIR = settings.uploads_dir
 ensure_upload_dir(UPLOAD_DIR)
+
+
+
+def validate_advance_for_expense(
+    db: Session,
+    advance_id: str,
+    current_user: User,
+    expected_currency: str | None = None,
+) -> AdvanceRequest | None:
+    if not advance_id:
+        return None
+
+    advance = db.query(AdvanceRequest).filter(
+        AdvanceRequest.id == advance_id,
+        AdvanceRequest.company_id == current_user.company_id,
+    ).first()
+    if not advance:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Avance introuvable ou non disponible pour cette entreprise",
+        )
+
+    if advance.user_id != current_user.id and current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous ne pouvez pas utiliser cette avance",
+        )
+
+    if advance.status in {AdvanceStatus.rejected.value, AdvanceStatus.reconciled.value}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cette avance n'est plus disponible pour lier une dépense",
+        )
+
+    if expected_currency and advance.currency and advance.currency != expected_currency:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La devise de la dépense doit correspondre à celle de l'avance",
+        )
+
+    return advance
 
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
@@ -48,9 +92,9 @@ def create_expense(
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entreprise introuvable")
 
-    currency = expense_in.currency or getattr(company, "default_currency", "EUR")
-    if not currency:
-        currency = "EUR"
+    currency = expense_in.currency or company.currency or "EUR"
+    if expense_in.advance_id is not None:
+        validate_advance_for_expense(db, expense_in.advance_id, current_user, expected_currency=currency)
 
     submitted_at = datetime.utcnow() if expense_in.status == ExpenseStatus.pending.value else None
 
@@ -62,9 +106,22 @@ def create_expense(
             detail="Aucun exercice comptable actif n'est ouvert pour cette entreprise."
         )
 
+    # Validation du département
+    department_id = expense_in.department_id
+    allowed_depts = [d.department_id for d in current_user.department_links]
+    if not department_id:
+        if current_user.department_links:
+            primary_dept = next((d.department_id for d in current_user.department_links if d.is_primary), None)
+            department_id = primary_dept or allowed_depts[0]
+    elif department_id not in allowed_depts and current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vous n'êtes pas autorisé à créer une dépense pour ce département.")
+
     expense = ExpenseRequest(
+        reference_number=generate_reference(db, current_user.company_id, "EXP"),
         company_id=current_user.company_id,
         user_id=current_user.id,
+        department_id=department_id,
+        project_id=expense_in.project_id,
         amount=expense_in.amount,
         currency=currency,
         category_id=expense_in.category_id,
@@ -153,16 +210,44 @@ def update_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
     is_admin = current_user.role in ["admin", "super_admin"]
+    is_accountant = current_user.role == "accountant"
 
-    # Only creator or admin can update
+    update_data = expense_update.model_dump(exclude_unset=True)
+
+    # Only creator, admin, or accountant (for accounting_account_id only) can update
     if expense.user_id != current_user.id and not is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+        if is_accountant:
+            # Comptable can only update accounting_account_id if they are not the creator
+            allowed_keys = {"accounting_account_id"}
+            if any(k not in allowed_keys for k in update_data.keys()):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Un comptable ne peut modifier que le compte d'imputation")
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
 
-    # Non-admins can only update draft, pending, or rejected requests
-    if not is_admin and expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value, ExpenseStatus.rejected.value}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon ne peut plus être modifié")
+    # Non-admins can only update draft, pending, or rejected requests (except accountant updating the account on an approved expense)
+    if not is_admin:
+        if is_accountant and expense.status in {ExpenseStatus.approved.value, ExpenseStatus.paid.value}:
+            # Accountant CAN update account on approved/paid expenses
+            pass
+        elif expense.status not in {ExpenseStatus.draft.value, ExpenseStatus.pending.value, ExpenseStatus.rejected.value}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon ne peut plus être modifié")
 
-    for field, value in expense_update.model_dump(exclude_unset=True).items():
+    if "advance_id" in update_data and update_data["advance_id"] is not None:
+        expected_currency = update_data.get("currency") or expense.currency
+        validate_advance_for_expense(db, update_data["advance_id"], current_user, expected_currency=expected_currency)
+
+    if "currency" in update_data and expense.advance_id is not None:
+        validate_advance_for_expense(db, expense.advance_id, current_user, expected_currency=update_data["currency"])
+
+    # Phase 4: seul le comptable ou admin peut surcharger le compte comptable
+    if "accounting_account_id" in update_data:
+        if current_user.role not in ["accountant", "admin", "super_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Seul un comptable ou administrateur peut modifier le compte comptable."
+            )
+
+    for field, value in update_data.items():
         setattr(expense, field, value)
 
     db.commit()
@@ -213,6 +298,7 @@ def submit_expense(
 
     expense.status = ExpenseStatus.pending.value
     expense.submitted_at = datetime.utcnow()
+    expense.rejection_comment = None
     
     log = ApprovalLog(
         company_id=expense.company_id,
@@ -340,11 +426,21 @@ def delete_attachment(
     return {"message": "Justificatif supprimé"}
 
 
-def can_approve(approver: User, expense: ExpenseRequest) -> bool:
+def can_approve(approver: User, expense: ExpenseRequest, db: Session) -> bool:
     if approver.id == expense.user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas approuver votre propre bon.")
     if approver.role not in ["manager", "admin", "super_admin"] and not approver.is_backup_manager:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les managers et admins peuvent approuver.")
+    
+    # Check Manager scope
+    if approver.role == "manager" and not approver.is_backup_manager:
+        if approver.scope_type == "DEPARTMENT":
+            if str(approver.scope_id) != str(expense.department_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Vous ne pouvez approuver que les bons de votre département."
+                )
+        # If GLOBAL, allow all
     return True
 
 
@@ -358,7 +454,7 @@ def approve_expense(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
-    can_approve(current_user, expense)
+    can_approve(current_user, expense, db)
 
     if expense.status != ExpenseStatus.pending.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce bon n'est pas en attente d'approbation")
@@ -391,7 +487,7 @@ def reject_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de dépense non trouvé")
 
     if expense.status == ExpenseStatus.pending.value:
-        can_approve(current_user, expense)
+        can_approve(current_user, expense, db)
     elif expense.status == ExpenseStatus.approved.value:
         is_accountant_or_admin = (
             current_user.role in ["accountant", "admin", "super_admin"]
@@ -414,6 +510,7 @@ def reject_expense(
         )
 
     expense.status = ExpenseStatus.rejected.value
+    expense.rejection_comment = reject_data.comment
     
     log = ApprovalLog(
         company_id=expense.company_id,
@@ -528,18 +625,23 @@ def mark_expense_as_paid(
                     detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour payer ce bon de {expense.amount} {expense.currency}."
                 )
             
-            # Create EXIT cash transaction
+            # Create EXIT cash transaction with PAY reference
             tx = CashTransaction(
+                reference_number=generate_reference(db, current_user.company_id, "PAY"),
                 cash_register_id=caisse.id,
                 type="EXIT",
                 amount=expense.amount,
                 source="expense",
-                description=f"Paiement direct de la note de frais n° {expense.id} à {expense.user.name if hasattr(expense, 'user') else ''}",
+                description=f"Paiement du bon {expense.reference_number or expense.id} à {expense.user.name if hasattr(expense, 'user') else ''}",
                 reference_id=expense.id,
                 created_by=current_user.id
             )
             caisse.current_balance -= expense.amount
             db.add(tx)
+            
+            # Phase 3: Génération des écritures comptables
+            from app.services.ledger_service import create_double_entry_for_expense
+            create_double_entry_for_expense(db, expense, caisse, current_user)
 
     expense.status = ExpenseStatus.paid.value
     

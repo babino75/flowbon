@@ -25,6 +25,38 @@ def create_company(
     return company
 
 
+@router.post("/client", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
+def create_client_company(
+    company_in: CompanyCreateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    # Create the company
+    company_data = company_in.model_dump()
+    company_data["subscription_status"] = "trial"
+    company_data["subscription_plan"] = "free"
+    
+    company = Company(**company_data)
+    db.add(company)
+    db.commit()
+    db.refresh(company)
+
+    # Link the admin to this new company via UserCompany
+    from app.models.user_company import UserCompany
+    user_company = UserCompany(
+        user_id=current_user.id,
+        company_id=company.id,
+        role="admin"
+    )
+    db.add(user_company)
+    db.commit()
+
+    return company
+
+
 @router.get("/me", response_model=CompanyResponse)
 def read_my_company(
     current_user: User = Depends(get_current_active_user),

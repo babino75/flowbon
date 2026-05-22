@@ -1,13 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from app.core.dependencies import get_current_active_user, get_db
 from app.core.security import hash_password
-from app.models.user import User
+from app.models.user import User, UserCompany
+from app.models.company import Company
 from app.schemas.user import UserCreate, UserRoleUpdate, UserResponse
 from app.services.tenant import get_user_for_company, list_users_for_company
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/me/companies")
+def get_my_companies(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne toutes les entreprises accessibles par l'utilisateur."""
+    links = db.query(UserCompany).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.is_active == True
+    ).all()
+    result = []
+    for link in links:
+        company = db.query(Company).filter(Company.id == link.company_id).first()
+        if company:
+            from app.schemas.company import CompanyResponse
+            result.append({
+                "company": CompanyResponse.model_validate(company).model_dump(mode="json"),
+                "role": link.role,
+                "is_active_context": str(current_user.company_id) == str(link.company_id),
+            })
+    return result
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -90,6 +115,46 @@ def update_user_role(
         if role_update.is_backup_accountant is not None:
             user.is_backup_accountant = role_update.is_backup_accountant
             
+    if role_update.scope_type is not None:
+        user.scope_type = role_update.scope_type
+        user.scope_id = role_update.scope_id
+            
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/{user_id}/departments", response_model=UserResponse)
+def update_user_departments(
+    user_id: str,
+    department_ids: list[str],
+    primary_department_id: str | None = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    from uuid import UUID
+    from app.models.department import UserDepartment
+
+    user = get_user_for_company(db, user_id, current_user)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé")
+
+    # Clear existing links
+    db.query(UserDepartment).filter(UserDepartment.user_id == user.id).delete()
+    
+    # Add new links
+    for dept_id in department_ids:
+        try:
+            d_uuid = UUID(dept_id)
+            is_primary = (primary_department_id and str(d_uuid) == primary_department_id) or (len(department_ids) == 1)
+            link = UserDepartment(user_id=user.id, department_id=d_uuid, is_primary=is_primary)
+            db.add(link)
+        except ValueError:
+            continue
+
     db.commit()
     db.refresh(user)
     return user

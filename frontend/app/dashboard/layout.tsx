@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "../contexts/AuthContext";
-import { useEffect } from "react";
 
 export default function DashboardLayout({
   children,
@@ -9,13 +8,6 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, loading } = useAuth();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      const currentUrl = window.location.pathname + window.location.search;
-      window.location.href = `/login?redirect=${encodeURIComponent(currentUrl)}`;
-    }
-  }, [user, loading]);
 
   if (loading) {
     return (
@@ -31,8 +23,12 @@ export default function DashboardLayout({
     );
   }
 
+  // We keep the !user check to prevent rendering the dashboard content
+  // before the user data is loaded by the AuthContext, even if middleware
+  // protects the route (middleware only guarantees the token exists, not
+  // that the user object is already fetched in React state).
   if (!user) {
-    return null; // Prevents flashing of protected elements before redirect triggers
+    return null;
   }
 
   return <>{children}</>;

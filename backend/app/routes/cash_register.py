@@ -18,6 +18,7 @@ from app.schemas.cash_register import (
     CashTransactionManualCreate,
     CashTransactionResponse,
     CashRegisterAssignCashiers,
+    CashRegisterUpdateSchema,
 )
 from app.schemas.cash_source import CashSourceCreate, CashSourceResponse
 from app.core.dependencies import get_current_active_user
@@ -81,6 +82,10 @@ def create_cash_register(
         company_id=current_user.company_id,
         name=caisse_in.name,
         currency=caisse_in.currency or "XOF",
+        account_type=caisse_in.account_type or "CASH",
+        bank_name=caisse_in.bank_name,
+        account_number=caisse_in.account_number,
+        accounting_account_id=caisse_in.accounting_account_id,
         current_balance=0.00
     )
     
@@ -92,6 +97,53 @@ def create_cash_register(
     db.commit()
     db.refresh(caisse)
     return caisse
+
+
+@router.patch("/{caisse_id}", response_model=CashRegisterResponse)
+def update_cash_register(
+    caisse_id: str,
+    caisse_update: CashRegisterUpdateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les administrateurs peuvent modifier une caisse")
+
+    caisse = db.query(CashRegister).filter(
+        CashRegister.id == UUID(caisse_id),
+        CashRegister.company_id == current_user.company_id
+    ).first()
+    if not caisse:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caisse introuvable")
+
+    update_data = caisse_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(caisse, field, value)
+
+    db.commit()
+    db.refresh(caisse)
+    return caisse
+
+
+@router.delete("/{caisse_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deactivate_cash_register(
+    caisse_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    caisse = db.query(CashRegister).filter(
+        CashRegister.id == UUID(caisse_id),
+        CashRegister.company_id == current_user.company_id
+    ).first()
+    if not caisse:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caisse introuvable")
+
+    caisse.is_active = False
+    db.commit()
+    return
 
 
 @router.put("/{caisse_id}/cashiers", response_model=CashRegisterResponse)

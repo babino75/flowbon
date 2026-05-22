@@ -16,11 +16,15 @@ export default function NewExpensePage() {
     tax_amount: "",
     currency: "XOF",
     category_id: "",
+    department_id: "",
+    project_id: "",
     description: "",
     expense_date: "",
     status: "draft",
   });
   const [categories, setCategories] = useState<any[]>([]);
+  const [userDepartments, setUserDepartments] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [activeAdvances, setActiveAdvances] = useState<any[]>([]);
   const [selectedAdvanceId, setSelectedAdvanceId] = useState("");
   const [activeFiscalYear, setActiveFiscalYear] = useState<any>(null);
@@ -47,19 +51,33 @@ export default function NewExpensePage() {
   useEffect(() => {
     const initPage = async () => {
       try {
-        const [cats, comp, advances, activeFY] = await Promise.all([
+        const [cats, comp, advances, activeFY, projs] = await Promise.all([
           api.getCategories(true).catch(() => []),
           api.getCompany(),
           api.getAdvances({ status_filter: "disbursed" }).catch(() => []),
           api.getActiveFiscalYear().catch(() => null),
+          api.listProjects(false).catch(() => []),
         ]);
         setCategories(cats as any[]);
         setActiveAdvances(advances as any[]);
-        
+        setProjects(projs as any[]);
+
         if (activeFY) {
           setActiveFiscalYear(activeFY);
         }
-        
+
+        // Populate user departments from auth context
+        const deptLinks = (user as any)?.department_links || [];
+        setUserDepartments(deptLinks);
+        if (deptLinks.length === 1) {
+          // Auto-assign if only one department
+          setFormData((prev) => ({ ...prev, department_id: deptLinks[0].department_id }));
+        } else if (deptLinks.length > 1) {
+          // Pre-select primary
+          const primary = deptLinks.find((d: any) => d.is_primary);
+          if (primary) setFormData((prev) => ({ ...prev, department_id: primary.department_id }));
+        }
+
         if ((cats as any[]).length > 0) {
           setFormData((prev) => ({
             ...prev,
@@ -79,7 +97,7 @@ export default function NewExpensePage() {
       }
     };
     initPage();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedAdvanceId && activeAdvances.length > 0) {
@@ -129,7 +147,7 @@ export default function NewExpensePage() {
     setLoading(true);
 
     try {
-      const data = {
+      const data: Record<string, unknown> = {
         amount: Number(formData.amount),
         tax_amount: Number(formData.tax_amount) || 0,
         currency: formData.currency,
@@ -139,6 +157,8 @@ export default function NewExpensePage() {
         status: formData.status,
         advance_id: selectedAdvanceId || null,
       };
+      if (formData.department_id) data.department_id = formData.department_id;
+      if (formData.project_id) data.project_id = formData.project_id;
       const created = await api.createExpense(data) as any;
       
       if (files.length > 0 && created && created.id) {
@@ -296,6 +316,43 @@ export default function NewExpensePage() {
                 )}
               </label>
             </div>
+
+            {/* Department dropdown — only shown when user belongs to multiple departments */}
+            {userDepartments.length > 1 && (
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Département / Projet</span>
+                <select
+                  value={formData.department_id}
+                  onChange={(e) => handleChange("department_id", e.target.value)}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
+                  required
+                >
+                  <option value="">Sélectionner un département...</option>
+                  {userDepartments.map((link: any) => (
+                    <option key={link.department_id} value={link.department_id}>
+                      {link.department?.name || link.department_id}
+                      {link.is_primary ? " (Principal)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {/* Project dropdown (Phase 4) */}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Projet (Facultatif)</span>
+              <select
+                value={formData.project_id}
+                onChange={(e) => handleChange("project_id", e.target.value)}
+                className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
+              >
+                <option value="">-- Aucun projet --</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+
 
             {/* Optional cash advance dropdown */}
             <label className="block">

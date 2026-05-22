@@ -34,3 +34,4 @@ class Company(Base):
 
     users = relationship("User", back_populates="company")
     invitations = relationship("Invitation", back_populates="company")
+    projects = relationship("Project", back_populates="company")

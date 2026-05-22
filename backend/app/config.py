@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-load_dotenv(BASE_DIR / "app" / ".env")
-load_dotenv(BASE_DIR / ".env", override=True)
+# Load secrets from the root .env file.
+# We do not override existing environment variables (e.g. those provided by Docker).
+load_dotenv(BASE_DIR / ".env", override=False)
 
 
 @dataclass(frozen=True)

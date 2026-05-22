@@ -234,3 +234,44 @@ def reset_password(request: Request, data: ResetPasswordSchema, db: Session = De
     
     return {"message": "Votre mot de passe a été réinitialisé avec succès."}
 
+
+@router.post("/switch-company", response_model=TokenResponse)
+def switch_company(
+    company_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Basculer vers une autre entreprise (pour les utilisateurs multi-entreprises)."""
+    from uuid import UUID
+    from app.models.user import UserCompany
+
+    try:
+        c_uuid = UUID(company_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID d'entreprise invalide")
+
+    # Verify the user has access to this company
+    link = db.query(UserCompany).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.company_id == c_uuid,
+        UserCompany.is_active == True
+    ).first()
+
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas accès à cette entreprise"
+        )
+
+    # Update the user's active company
+    current_user.company_id = c_uuid
+    current_user.role = link.role
+    current_user.scope_type = link.scope_type
+    current_user.scope_id = link.scope_id
+    db.commit()
+
+    # Issue a new access token
+    access_token = create_access_token(subject=str(current_user.id))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+

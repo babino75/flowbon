@@ -28,6 +28,7 @@ class AdvanceUpdateSchema(BaseModel):
 
 class AdvanceResponse(AdvanceBase):
     id: UUID
+    reference_number: Optional[str] = None
     company_id: UUID
     user_id: UUID
     status: str

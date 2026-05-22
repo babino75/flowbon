@@ -595,6 +595,7 @@ function AccountantDashboard({
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/accounting/plan" label="🗺️ Plan Comptable" color="bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -701,6 +702,7 @@ function AdminDashboard({
           <QuickActionLink href="/dashboard/users" label="👥 Équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/company" label="🏢 Société" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/accounting/plan" label="🗺️ Plan Comptable" color="bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" />
         </div>
         <div className="flex gap-2">
           <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
@@ -811,6 +813,8 @@ export default function DashboardPage() {
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [categories, setCategories] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [myCompanies, setMyCompanies] = useState<any[]>([]);
+  const [switchingCompany, setSwitchingCompany] = useState(false);
 
   const [summary, setSummary] = useState<any>(null);
   const [categoryData, setCategoryData] = useState<any[]>([]);
@@ -905,7 +909,34 @@ export default function DashboardPage() {
         .then(res => setEmployees(res as any[]))
         .catch(err => console.error("Failed to load users", err));
     }
+
+    // Load available workspaces
+    api.getMyCompanies()
+      .then(res => {
+        const comps = res as any[];
+        // Only show switcher if there's more than one company accessible
+        if (comps && comps.length > 1) {
+          setMyCompanies(comps);
+        }
+      })
+      .catch(err => console.error("Failed to load workspaces", err));
   }, [user]);
+
+  const handleSwitchCompany = async (companyId: string) => {
+    setSwitchingCompany(true);
+    try {
+      const res = await api.switchCompany(companyId) as any;
+      if (res.access_token) {
+        setToken(res.access_token);
+        window.location.href = "/dashboard"; // hard refresh to reset all states
+      }
+    } catch (err) {
+      console.error("Failed to switch company", err);
+      alert("Erreur lors du changement d'espace de travail.");
+    } finally {
+      setSwitchingCompany(false);
+    }
+  };
 
   // Construct dynamic filters query string (supports excluding status)
   const getFilterQueryString = (excludeStatus = false) => {
@@ -1315,6 +1346,27 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+
+              {/* Workspace Switcher */}
+              {myCompanies.length > 1 && (
+                <div className="relative flex items-center border-r border-gray-200 pr-3 mr-1">
+                  <select
+                    value={company?.id || ""}
+                    onChange={(e) => handleSwitchCompany(e.target.value)}
+                    disabled={switchingCompany}
+                    className="text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 appearance-none pr-8"
+                  >
+                    {myCompanies.map((c) => (
+                      <option key={c.company.id} value={c.company.id}>
+                        🏢 {c.company.name} {c.role === "admin" ? "(Admin)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center px-2 text-slate-500">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                  </div>
+                </div>
+              )}
 
               {/* User profile dropdown */}
               <div className="relative" ref={profileRef}>
