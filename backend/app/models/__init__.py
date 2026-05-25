@@ -15,3 +15,4 @@ from app.models.accounting import AccountingAccount, ExpenseCategoryAccountingMa
 from app.models.department import Department
 from app.models.project import Project
 from app.models.document_sequence import DocumentSequence
+from app.models.treasury import TreasuryAccount, TreasuryTransaction

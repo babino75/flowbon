@@ -290,6 +290,14 @@ export const api = {
     });
   },
 
+  updateUserScope: async (userId: string, data: { scope_type: string; scope_id?: string | null }) => {
+    return fetchWithAuth(`/users/${userId}/scope`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
   activateUser: async (userId: string) => {
     return fetchWithAuth(`/users/${userId}/activate`, { method: "PATCH" });
   },
@@ -609,6 +617,381 @@ export const api = {
     window.URL.revokeObjectURL(url);
   },
 
+  // ─── Ledger/Comptabilité Exports ──────────────────────────────────────────
+  exportLedgerExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/ledger/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/ledger/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Grand Livre Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ledger_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportLedgerPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/ledger/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/ledger/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Grand Livre PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ledger_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  // ─── Treasury/Trésorerie Exports ──────────────────────────────────────────
+  exportTreasuryExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/treasury/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/treasury/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Trésorerie Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `treasury_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportTreasuryPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/treasury/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/treasury/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Trésorerie PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `treasury_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  // ─── Projects Exports ─────────────────────────────────────────────────────
+  exportProjectsExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/projects/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/projects/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Projets Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `projects_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportProjectsPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/projects/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/projects/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Projets PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `projects_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  // ─── Departments Exports ──────────────────────────────────────────────────
+  exportDepartmentsExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/departments/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/departments/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Départements Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `departments_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportDepartmentsPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/departments/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/departments/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Départements PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `departments_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  // ─── Audit/Workflow Exports ───────────────────────────────────────────────
+  exportAuditExcel: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/audit/excel${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/audit/excel${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Audit Excel");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit_workflow_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  exportAuditPdf: async (query?: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const config: RequestInit = { credentials: "include", headers };
+    let response = await fetch(`${API_URL}/exports/audit/pdf${query ? `?${query}` : ""}`, config);
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setToken(data.access_token);
+        headers.set("Authorization", `Bearer ${data.access_token}`);
+        response = await fetch(`${API_URL}/exports/audit/pdf${query ? `?${query}` : ""}`, { credentials: "include", headers });
+      } else {
+        window.location.href = "/login";
+        throw new Error("Session expirée");
+      }
+    }
+    if (!response.ok) {
+      throw new Error("Erreur lors de l'export Audit PDF");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit_workflow_${new Date().toISOString().split("T")[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
   getCategories: async (onlyActive?: boolean) => {
     return fetchWithAuth(`/categories${onlyActive ? "?only_active=true" : ""}`);
   },
@@ -800,10 +1183,10 @@ export const api = {
     });
   },
 
-  uploadCashJustificatif: async (file: File) => {
+  uploadCashJustificatif: async (caisseId: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return fetchWithAuth("/caisses/upload", {
+    return fetchWithAuth(`/caisses/${caisseId}/upload`, {
       method: "POST",
       body: formData,
     });
@@ -890,6 +1273,10 @@ export const api = {
     return fetchWithAuth(`/projects?include_inactive=${includeInactive}`);
   },
 
+  listProjectMembers: async (projectId: string) => {
+    return fetchWithAuth(`/projects/${projectId}/members`);
+  },
+
   createProject: async (data: { name: string; code?: string; description?: string }) => {
     return fetchWithAuth("/projects", {
       method: "POST",
@@ -920,7 +1307,71 @@ export const api = {
       method: "POST",
     });
   },
+
+  // ─── Treasury ────────────────────────────────────────────────
+  getTreasuryAccounts: async (isActive?: boolean) => {
+    const params = isActive !== undefined ? `?is_active=${isActive}` : "";
+    return fetchWithAuth(`/treasury/accounts${params}`);
+  },
+
+  createTreasuryAccount: async (data: {
+    name: string; user_label: string; type: string;
+    currency: string; opening_balance?: number; accounting_account_id?: string;
+  }) => {
+    return fetchWithAuth("/treasury/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateTreasuryAccount: async (id: string, data: {
+    name?: string; user_label?: string; is_active?: boolean; accounting_account_id?: string;
+  }) => {
+    return fetchWithAuth(`/treasury/accounts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  getTreasuryTransactions: async (params?: {
+    account_id?: string; type?: string; status?: string;
+    from_date?: string; to_date?: string; skip?: number; limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.account_id) q.append("account_id", params.account_id);
+    if (params?.type) q.append("type", params.type);
+    if (params?.status) q.append("status", params.status);
+    if (params?.from_date) q.append("from_date", params.from_date);
+    if (params?.to_date) q.append("to_date", params.to_date);
+    if (params?.skip !== undefined) q.append("skip", String(params.skip));
+    if (params?.limit !== undefined) q.append("limit", String(params.limit));
+    return fetchWithAuth(`/treasury/transactions?${q.toString()}`);
+  },
+
+  createTreasuryTransaction: async (data: {
+    treasury_account_id: string; type: string; amount: number;
+    currency: string; source_type: string; description?: string;
+    category_id?: string; project_id?: string; department_id?: string;
+    linked_expense_id?: string; linked_advance_id?: string;
+    from_treasury_account_id?: string; to_treasury_account_id?: string;
+    reference?: string; external_reference?: string;
+  }) => {
+    return fetchWithAuth("/treasury/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
+
+  validateTreasuryTransaction: async (id: string, data: { status: "VALIDATED" | "REJECTED"; description?: string }) => {
+    return fetchWithAuth(`/treasury/transactions/${id}/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  },
 };
 
-
-
+export default api;

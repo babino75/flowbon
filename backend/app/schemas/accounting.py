@@ -54,6 +54,9 @@ class LedgerEntryResponse(BaseModel):
     reference_number: Optional[str] = None
     company_id: UUID
     accounting_account_id: UUID
+    fiscal_year_id: Optional[UUID] = None
+    journal_type: Optional[str] = None
+    piece_number: Optional[str] = None
     reference_id: Optional[UUID] = None
     reference_type: str
     description: Optional[str] = None
@@ -62,7 +65,7 @@ class LedgerEntryResponse(BaseModel):
     transaction_date: datetime
     created_at: datetime
     account: Optional[AccountingAccountResponse] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

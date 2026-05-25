@@ -173,8 +173,9 @@ export default function CaissePage() {
     try {
       const data = await api.getCaisseTransactions(caisseId) as CashTransaction[];
       setTransactions(data);
-    } catch {
+    } catch (err: any) {
       setTransactions([]);
+      setError(err instanceof Error ? err.message : "Impossible de charger le journal de caisse.");
     } finally {
       setTxLoading(false);
     }
@@ -205,11 +206,14 @@ export default function CaissePage() {
     setUploadError(null);
 
     try {
-      const result = await api.uploadCashJustificatif(file) as { file_url: string; file_name: string };
+      if (!selectedCaisse) {
+        throw new Error("Aucune caisse sélectionnée pour l'upload.");
+      }
+      const result = await api.uploadCashJustificatif(selectedCaisse.id, file) as { file_url: string; file_name: string };
       setAttachmentUrl(result.file_url);
       setAttachmentName(result.file_name);
     } catch (err: any) {
-      setUploadError(err.message || "Erreur lors du téléversement.");
+      setUploadError(err instanceof Error ? err.message : "Erreur lors du téléversement.");
       setAttachmentUrl(null);
       setAttachmentName(null);
     } finally {
@@ -370,7 +374,7 @@ export default function CaissePage() {
           <Link href="/dashboard" className="text-slate-400 hover:text-slate-600 transition-colors text-sm font-semibold">← Dashboard</Link>
           <span className="text-slate-300">/</span>
           <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            <span className="text-2xl">💵</span> Trésorerie & Caisse
+            <span className="text-2xl">💵</span> Trésorerie
           </h1>
         </div>
         {isAdmin && (

@@ -36,8 +36,8 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AccountingPage() {
   const { user } = useAuth();
-  //const [activeTab, setActiveTab] = useState<"categories" | "sources" | "fiscal_years">("categories");
-  const [activeTab, setActiveTab] = useState<"sources" | "fiscal_years">("sources");
+  // "sources" tab is hidden (replaced by /dashboard/treasury)
+  const [activeTab, setActiveTab] = useState<"sources" | "fiscal_years">("fiscal_years");
 
   // Shared state
   const [loading, setLoading] = useState(true);
@@ -115,9 +115,7 @@ export default function AccountingPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (activeTab === "sources") loadSources();
-    else if (activeTab === "fiscal_years") loadFiscalYears();
-    //else if (activeTab === "fiscal_years") loadFiscalYears();
+    if (activeTab === "fiscal_years") loadFiscalYears();
   }, [activeTab, user]);
 
   // Categories Handlers
@@ -260,7 +258,7 @@ export default function AccountingPage() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Paramètres Comptables</h1>
             <p className="mt-2 text-slate-500 text-sm max-w-xl">
-              Gérez le plan comptable, les sources de trésorerie et les exercices annuels de votre entreprise.
+              Gérez le plan comptable et les exercices annuels de votre entreprise.
             </p>
           </div>
         </div>
@@ -275,14 +273,7 @@ export default function AccountingPage() {
             <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-md font-bold">NEW</span>
           </Link>
 
-          <button
-            onClick={() => setActiveTab("sources")}
-            className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
-              activeTab === "sources" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            🏦 Sources de Trésorerie
-          </button>
+          {/* 🏦 Sources de Trésorerie masquée — remplacée par /dashboard/treasury */}
           <button
             onClick={() => setActiveTab("fiscal_years")}
             className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${

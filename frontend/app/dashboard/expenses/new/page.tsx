@@ -317,26 +317,25 @@ export default function NewExpensePage() {
               </label>
             </div>
 
-            {/* Department dropdown — only shown when user belongs to multiple departments */}
-            {userDepartments.length > 1 && (
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Département / Projet</span>
-                <select
-                  value={formData.department_id}
-                  onChange={(e) => handleChange("department_id", e.target.value)}
-                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm"
-                  required
-                >
-                  <option value="">Sélectionner un département...</option>
-                  {userDepartments.map((link: any) => (
-                    <option key={link.department_id} value={link.department_id}>
-                      {link.department?.name || link.department_id}
-                      {link.is_primary ? " (Principal)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            {/* Department dropdown — always shown, but fixed if user has only 1 department */}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Département (Obligatoire)</span>
+              <select
+                value={formData.department_id}
+                onChange={(e) => handleChange("department_id", e.target.value)}
+                disabled={userDepartments.length <= 1}
+                className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                required
+              >
+                <option value="" disabled>Sélectionner un département...</option>
+                {userDepartments.map((link: any) => (
+                  <option key={link.department_id} value={link.department_id}>
+                    {link.department?.name || link.department_id}
+                    {link.is_primary ? " (Principal)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             {/* Project dropdown (Phase 4) */}
             <label className="block">

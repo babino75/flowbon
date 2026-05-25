@@ -9,6 +9,11 @@ from app.models.expense import ExpenseRequest, ExpenseCategory
 from app.models.invitation import Invitation
 from app.models.user import User
 from app.models.advance import AdvanceRequest
+from app.models.accounting import LedgerEntry, AccountingAccount
+from app.models.cash_register import CashTransaction, CashRegister
+from app.models.project import Project
+from app.models.department import Department
+from app.models.approval_log import ApprovalLog
 
 
 def get_company_for_user(db: Session, current_user: User) -> Optional[Company]:
@@ -23,6 +28,23 @@ def list_users_for_company(db: Session, current_user: User):
     query = db.query(User)
     if current_user.company_id:
         query = query.filter(User.company_id == current_user.company_id)
+        
+    # Filtrage pour le manager et le comptable: ne voir que leur équipe (même département)
+    if current_user.role in ["manager", "accountant"]:
+        from app.models.department import UserDepartment
+        
+        # On récupère tous les départements (primaires ou non) du manager/comptable
+        user_depts = db.query(UserDepartment.department_id).filter(
+            UserDepartment.user_id == current_user.id
+        ).all()
+        dept_ids = [d.department_id for d in user_depts]
+        
+        if dept_ids:
+            # Ne récupérer que les utilisateurs qui sont liés à ces mêmes départements
+            query = query.join(UserDepartment, User.id == UserDepartment.user_id).filter(
+                UserDepartment.department_id.in_(dept_ids)
+            )
+
     return query.all()
 
 
@@ -75,6 +97,10 @@ def list_expenses_for_company(db: Session, current_user: User, filters: dict):
         query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
     if filters.get("to_date"):
         query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
+    if filters.get("project_id"):
+        query = query.filter(ExpenseRequest.project_id == filters["project_id"])
+    if filters.get("department_id"):
+        query = query.filter(ExpenseRequest.department_id == filters["department_id"])
 
     page = filters.get("page", 1)
     limit = filters.get("limit", 20)
@@ -395,4 +421,205 @@ def update_department_service(db: Session, dept, update_data: dict):
 def delete_department_service(db: Session, dept):
     db.delete(dept)
     db.commit()
+
+
+def list_ledger_entries_for_company(db: Session, current_user: User, filters: dict):
+    """Retrieve ledger entries for the current user's company.
+    Always restrict to company_id for multi-tenant safety."""
+    query = db.query(LedgerEntry).options(joinedload(LedgerEntry.account))
+    
+    if current_user.company_id:
+        query = query.filter(LedgerEntry.company_id == current_user.company_id)
+    
+    if filters.get("from_date"):
+        query = query.filter(LedgerEntry.transaction_date >= filters["from_date"])
+    if filters.get("to_date"):
+        query = query.filter(LedgerEntry.transaction_date <= filters["to_date"])
+    if filters.get("reference_type"):
+        query = query.filter(LedgerEntry.reference_type == filters["reference_type"])
+    if filters.get("account_id"):
+        query = query.filter(LedgerEntry.accounting_account_id == filters["account_id"])
+    
+    page = filters.get("page", 1)
+    limit = filters.get("limit", 20)
+    return query.order_by(LedgerEntry.transaction_date.desc()).offset((page - 1) * limit).limit(limit).all()
+
+
+def list_cash_transactions_for_company(db: Session, current_user: User, filters: dict):
+    """Retrieve cash transactions for the current user's company.
+    Always restrict to company_id for multi-tenant safety.
+    Used for treasury export."""
+    query = db.query(CashTransaction).options(
+        joinedload(CashTransaction.cash_register),
+        joinedload(CashTransaction.creator)
+    )
+    
+    # Ensure multi-tenant isolation
+    if current_user.company_id:
+        query = query.join(CashRegister).filter(CashRegister.company_id == current_user.company_id)
+    
+    # Filter by date range
+    if filters.get("from_date"):
+        query = query.filter(CashTransaction.created_at >= filters["from_date"])
+    if filters.get("to_date"):
+        query = query.filter(CashTransaction.created_at <= filters["to_date"])
+    
+    # Filter by transaction type (ENTRY / EXIT)
+    if filters.get("transaction_type"):
+        query = query.filter(CashTransaction.type == filters["transaction_type"])
+    
+    # Filter by cash register
+    if filters.get("cash_register_id"):
+        query = query.filter(CashTransaction.cash_register_id == filters["cash_register_id"])
+    
+    # Filter by source
+    if filters.get("source"):
+        query = query.filter(CashTransaction.source == filters["source"])
+    
+    page = filters.get("page", 1)
+    limit = filters.get("limit", 20)
+    return query.order_by(CashTransaction.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+
+def list_projects_summary_for_company(db: Session, current_user: User, filters: dict):
+    """Get project aggregations: total expenses, expense count, accounts used, departments, statuses.
+    Always restrict to company_id for multi-tenant safety."""
+    query = db.query(
+        Project.id,
+        Project.name,
+        Project.code,
+        Project.status,
+        func.count(ExpenseRequest.id).label("expense_count"),
+        func.sum(ExpenseRequest.amount).label("total_amount"),
+    ).outerjoin(ExpenseRequest)
+    
+    if current_user.company_id:
+        query = query.filter(Project.company_id == current_user.company_id)
+    
+    # Filter by date range
+    if filters.get("from_date"):
+        query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
+    if filters.get("to_date"):
+        query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
+    
+    # Filter by status
+    if filters.get("status"):
+        query = query.filter(ExpenseRequest.status == filters["status"])
+    
+    # Only active projects by default
+    if not filters.get("include_inactive"):
+        query = query.filter(Project.is_active == True)
+    
+    results = query.group_by(Project.id, Project.name, Project.code, Project.status).all()
+    
+    return [
+        {
+            "project_id": r.id,
+            "project_name": r.name,
+            "project_code": r.code,
+            "status": r.status,
+            "expense_count": r.expense_count or 0,
+            "total_amount": float(r.total_amount or 0),
+        }
+        for r in results
+    ]
+
+
+def list_departments_summary_for_company(db: Session, current_user: User, filters: dict):
+    """Get department aggregations: expense count, total amount, categories used, accounts linked.
+    Always restrict to company_id for multi-tenant safety."""
+    query = db.query(
+        Department.id,
+        Department.name,
+        func.count(ExpenseRequest.id).label("expense_count"),
+        func.sum(ExpenseRequest.amount).label("total_amount"),
+    ).outerjoin(ExpenseRequest)
+    
+    if current_user.company_id:
+        query = query.filter(Department.company_id == current_user.company_id)
+    
+    # Filter by date range
+    if filters.get("from_date"):
+        query = query.filter(ExpenseRequest.expense_date >= filters["from_date"])
+    if filters.get("to_date"):
+        query = query.filter(ExpenseRequest.expense_date <= filters["to_date"])
+    
+    # Only active departments by default
+    if not filters.get("include_inactive"):
+        query = query.filter(Department.is_active == True)
+    
+    results = query.group_by(Department.id, Department.name).all()
+    
+    return [
+        {
+            "department_id": r.id,
+            "department_name": r.name,
+            "expense_count": r.expense_count or 0,
+            "total_amount": float(r.total_amount or 0),
+        }
+        for r in results
+    ]
+
+
+def list_audit_entries_for_company(db: Session, current_user: User, filters: dict):
+    """Get audit trail for expenses: creator, approvals, and final status.
+    Always restrict to company_id for multi-tenant safety."""
+    query = db.query(ExpenseRequest).options(
+        joinedload(ExpenseRequest.user),
+        joinedload(ExpenseRequest.approval_logs).joinedload(ApprovalLog.user)
+    )
+    
+    if current_user.company_id:
+        query = query.filter(ExpenseRequest.company_id == current_user.company_id)
+    
+    # Filter by date range
+    if filters.get("from_date"):
+        query = query.filter(ExpenseRequest.created_at >= filters["from_date"])
+    if filters.get("to_date"):
+        query = query.filter(ExpenseRequest.created_at <= filters["to_date"])
+    
+    # Filter by status
+    if filters.get("status"):
+        query = query.filter(ExpenseRequest.status == filters["status"])
+    
+    page = filters.get("page", 1)
+    limit = filters.get("limit", 100)  # Higher limit for audit exports
+    expenses = query.order_by(ExpenseRequest.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    
+    # Build audit trail for each expense
+    audit_entries = []
+    for expense in expenses:
+        # Initialize audit entry
+        audit_entry = {
+            "reference_number": expense.reference_number,
+            "created_by": expense.user.name if expense.user else "",
+            "created_at": expense.created_at.strftime("%Y-%m-%d %H:%M") if expense.created_at else "",
+            "status_final": expense.status,
+            "approved_manager_by": "",
+            "approved_manager_at": "",
+            "approved_accounting_by": "",
+            "approved_accounting_at": "",
+            "paid_by": "",
+            "paid_at": "",
+        }
+        
+        # Parse approval logs to extract timeline
+        if expense.approval_logs:
+            for log in expense.approval_logs:
+                user_name = log.user.name if log.user else ""
+                log_date = log.created_at.strftime("%Y-%m-%d %H:%M") if log.created_at else ""
+                
+                if log.action == "approved_manager":
+                    audit_entry["approved_manager_by"] = user_name
+                    audit_entry["approved_manager_at"] = log_date
+                elif log.action == "approved_accounting":
+                    audit_entry["approved_accounting_by"] = user_name
+                    audit_entry["approved_accounting_at"] = log_date
+                elif log.action == "paid":
+                    audit_entry["paid_by"] = user_name
+                    audit_entry["paid_at"] = log_date
+        
+        audit_entries.append(audit_entry)
+    
+    return audit_entries
 

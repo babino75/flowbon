@@ -12,6 +12,7 @@ from app.models.company import Company
 from app.models.advance import AdvanceRequest, AdvanceStatus
 from app.models.expense import ExpenseRequest, ExpenseStatus
 from app.schemas.advance import AdvanceCreateSchema, AdvanceResponse, AdvanceUpdateSchema
+from app.services.permissions import can_validate_request
 from app.core.dependencies import get_current_active_user
 from app.services.fiscal_year_service import get_active_fiscal_year
 from app.services.reference_service import generate_reference
@@ -144,14 +145,8 @@ def approve_advance(
     if not advance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
 
-    # Only manager, admin or backup manager can approve
-    is_authorized = current_user.role in ["manager", "admin", "super_admin"] or current_user.is_backup_manager
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les managers et administrateurs peuvent approuver")
-
-    # Anti-self approval
-    if current_user.id == advance.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas approuver votre propre demande d'avance")
+    # Scope-based validation
+    can_validate_request(current_user, advance, db)
 
     if advance.status != AdvanceStatus.pending.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seules les demandes en attente peuvent être approuvées")
@@ -204,9 +199,12 @@ def validate_financial_advance(
 def disburse_advance(
     advance_id: str,
     caisse_id: Optional[str] = Query(None),
+    treasury_account_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    from app.services.treasury_service import create_advance_payment_transactions
+    
     advance = get_advance_for_company(db, advance_id, current_user)
     if not advance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
@@ -228,12 +226,14 @@ def disburse_advance(
         if advance.status != AdvanceStatus.approved.value:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Les fonds ne peuvent être remis que pour des demandes approuvées")
 
-    # Cash register integration
-    from app.models.cash_register import CashRegister, CashTransaction
+    # Cash register integration (legacy system)
+    from app.models.cash_register import CashRegister
     caisse = None
+    caisse_uuid = None
     if caisse_id:
         try:
             c_uuid = UUID(caisse_id)
+            caisse_uuid = c_uuid
             caisse = db.query(CashRegister).filter(
                 CashRegister.id == c_uuid,
                 CashRegister.company_id == current_user.company_id
@@ -245,6 +245,8 @@ def disburse_advance(
     else:
         # Auto-select the first/default caisse of the company if exists
         caisse = db.query(CashRegister).filter(CashRegister.company_id == current_user.company_id).first()
+        if caisse:
+            caisse_uuid = caisse.id
 
     if caisse:
         if caisse.current_balance < advance.amount:
@@ -252,20 +254,34 @@ def disburse_advance(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour décaisser cette avance de {advance.amount} {advance.currency}."
             )
-        
-        # Create EXIT cash transaction with PAY reference
-        tx = CashTransaction(
-            reference_number=generate_reference(db, current_user.company_id, "PAY"),
-            cash_register_id=caisse.id,
-            type="EXIT",
-            amount=advance.amount,
-            source="advance_payout",
-            description=f"Décaissement de l'avance {advance.reference_number or advance.id} à {advance.user.name if hasattr(advance, 'user') else ''}",
-            reference_id=advance.id,
-            created_by=current_user.id
-        )
-        caisse.current_balance -= advance.amount
-        db.add(tx)
+
+    # Dual-write: Create transactions in both legacy and new treasury systems
+    treasury_account_uuid = None
+    try:
+        if treasury_account_id:
+            treasury_account_uuid = UUID(treasury_account_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de compte de trésorerie invalide")
+
+    cash_tx, treasury_tx = create_advance_payment_transactions(
+        db=db,
+        company_id=advance.company_id,
+        advance_id=UUID(advance_id),
+        cash_register_id=caisse_uuid,
+        treasury_account_id=treasury_account_uuid,
+        amount=advance.amount,
+        currency=advance.currency,
+        department_id=advance.department_id,
+        project_id=advance.project_id,
+        created_by=current_user.id,
+        description=f"Décaissement de l'avance {advance.reference_number or advance.id}",
+        reference=generate_reference(db, advance.company_id, "ADV"),
+    )
+
+    # Écriture comptable en partie double (ex: 425 Avances / 571 Caisse)
+    if cash_tx and caisse:
+        from app.services.ledger_service import create_double_entry_for_advance
+        create_double_entry_for_advance(db, advance, caisse, current_user)
 
     advance.status = AdvanceStatus.disbursed.value
     advance.disbursed_at = datetime.utcnow()
@@ -286,14 +302,8 @@ def reject_advance(
     if not advance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande d'avance introuvable")
 
-    # Only manager, accountant or admin can reject
-    is_authorized = current_user.role in ["manager", "accountant", "admin", "super_admin"] or current_user.is_backup_manager or current_user.is_backup_accountant
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Action non autorisée")
-
-    # Anti-self rejection is just logical (can't reject one's own)
-    if current_user.id == advance.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous ne pouvez pas rejeter votre propre demande")
+    # Scope-based validation
+    can_validate_request(current_user, advance, db, action="reject")
 
     if advance.status not in [AdvanceStatus.pending.value, AdvanceStatus.approved.value]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action impossible sur ce statut")

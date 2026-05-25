@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, Boolean, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text, Boolean, UniqueConstraint, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -46,6 +46,10 @@ class ExpenseCategoryAccountingMapping(Base):
     )
 
 
+# Valeurs autorisées pour journal_type
+JOURNAL_TYPES = ["CAISSE", "BANQUE", "ACHATS", "VENTES", "PAIE", "OD"]
+
+
 class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 
@@ -53,17 +57,26 @@ class LedgerEntry(Base):
     reference_number = Column(String, nullable=True, index=True)  # Ex: LED-2026-0200
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
     accounting_account_id = Column(UUID(as_uuid=True), ForeignKey("accounting_accounts.id"), nullable=False, index=True)
-    
+
+    # Lien avec l'exercice comptable pour les clôtures et le FEC
+    fiscal_year_id = Column(UUID(as_uuid=True), ForeignKey("fiscal_years.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Classification par journal (CAISSE, BANQUE, ACHATS, VENTES, PAIE, OD)
+    journal_type = Column(String(20), nullable=True, index=True)
+
+    # Numéro de pièce interne (différent de reference_number LED)
+    piece_number = Column(String(100), nullable=True)
+
     reference_id = Column(UUID(as_uuid=True), nullable=True, index=True)  # Links to Expense, CashTransaction, etc.
-    reference_type = Column(String, nullable=False)  # "EXPENSE_PAYMENT", "CASH_ENTRY", etc.
-    
+    reference_type = Column(String, nullable=False)  # "EXPENSE_PAYMENT", "ADVANCE_PAYMENT", etc.
+
     description = Column(String, nullable=True)
-    
-    from sqlalchemy import Numeric
+
     debit = Column(Numeric(12, 2), default=0.00, nullable=False)
     credit = Column(Numeric(12, 2), default=0.00, nullable=False)
-    
+
     transaction_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     account = relationship("AccountingAccount", back_populates="ledger_entries")
+    fiscal_year = relationship("FiscalYear", foreign_keys=[fiscal_year_id])

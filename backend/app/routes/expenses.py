@@ -574,10 +574,12 @@ def validate_financial_expense(
 def mark_expense_as_paid(
     expense_id: str,
     caisse_id: Optional[str] = Query(None),
+    treasury_account_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     from uuid import UUID
+    from app.services.treasury_service import create_expense_transactions
     
     expense = get_expense_for_company(db, expense_id, current_user)
     if not expense:
@@ -598,14 +600,19 @@ def mark_expense_as_paid(
         if expense.status != ExpenseStatus.approved.value:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le bon doit être approuvé avant paiement")
 
-    # Cash register integration
-    # Si la dépense n'est PAS liée à une avance (remboursement direct)
+    # Auto-resolve treasury account from user scope if applicable
+    if not treasury_account_id and current_user.scope_type == "TREASURY" and current_user.scope_id:
+        treasury_account_id = str(current_user.scope_id)
+
+    # Cash register integration (legacy system)
+    caisse_uuid = None
     if expense.advance_id is None:
         from app.models.cash_register import CashRegister, CashTransaction
         caisse = None
         if caisse_id:
             try:
                 c_uuid = UUID(caisse_id)
+                caisse_uuid = c_uuid
                 caisse = db.query(CashRegister).filter(
                     CashRegister.id == c_uuid,
                     CashRegister.company_id == current_user.company_id
@@ -613,8 +620,7 @@ def mark_expense_as_paid(
                 if not caisse:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La caisse spécifiée est introuvable")
                 
-                # ✅ FIX: Vérifier que le caissier est assigné à cette caisse (si c'est un caissier)
-                if current_user.role == "cashier" and current_user not in caisse.cashiers:
+                if current_user.role == "cashier" and not any(u.id == current_user.id for u in caisse.cashiers):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail=f"Vous n'êtes pas autorisé à utiliser la caisse '{caisse.name}'. Seuls les caissiers assignés peuvent effectuer des paiements."
@@ -622,15 +628,13 @@ def mark_expense_as_paid(
             except ValueError:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de caisse invalide")
         else:
-            # Auto-select the first/default caisse of the company if exists
             caisse = db.query(CashRegister).filter(CashRegister.company_id == current_user.company_id).first()
-            
-            # ✅ FIX: Vérifier que le caissier est assigné à la caisse par défaut (si c'est un caissier)
-            if caisse and current_user.role == "cashier" and current_user not in caisse.cashiers:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Vous n'êtes pas autorisé à utiliser la caisse par défaut '{caisse.name}'. Vous devez sélectionner une caisse à laquelle vous êtes assigné."
-                )
+            if caisse:
+                # If there's a legacy caisse but user isn't assigned to it, don't use it by default to avoid 403.
+                if current_user.role == "cashier" and not any(u.id == current_user.id for u in caisse.cashiers):
+                    caisse = None
+                else:
+                    caisse_uuid = caisse.id
 
         if caisse:
             if caisse.current_balance < expense.amount:
@@ -638,24 +642,49 @@ def mark_expense_as_paid(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Le solde de la caisse '{caisse.name}' ({caisse.current_balance} {caisse.currency}) est insuffisant pour payer ce bon de {expense.amount} {expense.currency}."
                 )
+
+    # Dual-write: Create transactions in both legacy and new treasury systems
+    from app.models.treasury import TreasuryAccount
+    treasury_account_uuid = None
+    if treasury_account_id:
+        try:
+            treasury_account_uuid = UUID(treasury_account_id)
+            t_account = db.query(TreasuryAccount).filter(
+                TreasuryAccount.id == treasury_account_uuid,
+                TreasuryAccount.company_id == current_user.company_id
+            ).first()
+            if not t_account:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Le compte de trésorerie spécifié est introuvable")
             
-            # Create EXIT cash transaction with PAY reference
-            tx = CashTransaction(
-                reference_number=generate_reference(db, current_user.company_id, "PAY"),
-                cash_register_id=caisse.id,
-                type="EXIT",
-                amount=expense.amount,
-                source="expense",
-                description=f"Paiement du bon {expense.reference_number or expense.id} à {expense.user.name if hasattr(expense, 'user') else ''}",
-                reference_id=expense.id,
-                created_by=current_user.id
-            )
-            caisse.current_balance -= expense.amount
-            db.add(tx)
+            if t_account.current_balance < expense.amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Le solde du compte '{t_account.name}' ({t_account.current_balance} {t_account.currency}) est insuffisant pour payer ce bon de {expense.amount} {expense.currency}."
+                )
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID de compte de trésorerie invalide")
             
-            # Phase 3: Génération des écritures comptables
-            from app.services.ledger_service import create_double_entry_for_expense
-            create_double_entry_for_expense(db, expense, caisse, current_user)
+    if not caisse_uuid and not treasury_account_uuid and expense.advance_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Aucun compte de trésorerie (ou caisse) n'a été spécifié ou assigné pour effectuer le paiement."
+        )
+
+    cash_tx, treasury_tx = create_expense_transactions(
+        db=db,
+        company_id=expense.company_id,
+        expense_id=UUID(expense_id),
+        cash_register_id=caisse_uuid,
+        treasury_account_id=treasury_account_uuid,
+        amount=expense.amount,
+        currency=expense.currency,
+        category_id=expense.category_id,
+        department_id=expense.department_id,
+        project_id=expense.project_id,
+        created_by=current_user.id,
+        description=f"Paiement du bon {expense.reference_number or expense.id}",
+        reference=generate_reference(db, expense.company_id, "EXP"),
+    )
 
     expense.status = ExpenseStatus.paid.value
     
@@ -666,6 +695,14 @@ def mark_expense_as_paid(
         action="paid"
     )
     db.add(log)
+    
+    # Phase 3: Génération des écritures comptables (only if cash transaction was created)
+    if cash_tx:
+        from app.services.ledger_service import create_double_entry_for_expense
+        caisse = db.query(CashRegister).filter(CashRegister.id == caisse_uuid).first()
+        if caisse:
+            create_double_entry_for_expense(db, expense, caisse, current_user)
+    
     db.commit()
     db.refresh(expense)
     # Notify employee that payment is done

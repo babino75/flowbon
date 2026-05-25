@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import { api, setToken } from "../lib/api";
 import { CategoryPieChart, MonthlyTrendBarChart } from "./components/DashboardCharts";
+import DashboardFilterBar from "./components/DashboardFilterBar";
 import { translateStatus } from "../lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -206,7 +207,16 @@ function EmployeeDashboard({
   setSelectedStatus,
   selectedCategory,
   setSelectedCategory,
-  categories
+  selectedProject,
+  setSelectedProject,
+  selectedDepartment,
+  setSelectedDepartment,
+  selectedCaisse,
+  setSelectedCaisse,
+  categories,
+  projects,
+  departments,
+  caisses
 }: any) {
   return (
     <>
@@ -223,7 +233,16 @@ function EmployeeDashboard({
         setSelectedStatus={setSelectedStatus}
         selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
+        selectedProject={selectedProject}
+        setSelectedProject={setSelectedProject}
+        selectedDepartment={selectedDepartment}
+        setSelectedDepartment={setSelectedDepartment}
+        selectedCaisse={selectedCaisse}
+        setSelectedCaisse={setSelectedCaisse}
         categories={categories}
+        projects={projects}
+        departments={departments}
+        caisses={caisses}
         showEmployeeFilter={false}
       />
 
@@ -264,8 +283,17 @@ function ManagerDashboard({
   setSelectedCategory,
   selectedEmployee,
   setSelectedEmployee,
+  selectedProject,
+  setSelectedProject,
+  selectedDepartment,
+  setSelectedDepartment,
+  selectedCaisse,
+  setSelectedCaisse,
   categories,
-  employees
+  employees,
+  projects,
+  departments,
+  caisses
 }: any) {
   return (
     <>
@@ -275,12 +303,8 @@ function ManagerDashboard({
         {isBackupAccountant && (
           <>
             <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
-            <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-              {exportingExcel ? "Export Excel..." : "⬇ Exporter Excel"}
-            </button>
-            <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
-              {exportingPdf ? "Génération PDF..." : "📄 Rapport PDF"}
-            </button>
+            
+            
           </>
         )}
         <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
@@ -297,8 +321,17 @@ function ManagerDashboard({
         setSelectedCategory={setSelectedCategory}
         selectedEmployee={selectedEmployee}
         setSelectedEmployee={setSelectedEmployee}
+        selectedProject={selectedProject}
+        setSelectedProject={setSelectedProject}
+        selectedDepartment={selectedDepartment}
+        setSelectedDepartment={setSelectedDepartment}
+        selectedCaisse={selectedCaisse}
+        setSelectedCaisse={setSelectedCaisse}
         categories={categories}
         employees={employees}
+        projects={projects}
+        departments={departments}
+        caisses={caisses}
         showEmployeeFilter={true}
       />
 
@@ -327,191 +360,7 @@ function ManagerDashboard({
   );
 }
 
-function ExportCenterCard({
-  onExportPayrollExcel,
-  onExportPayrollPdf,
-  exportingPayrollExcel,
-  exportingPayrollPdf,
-  onExportRejectionsPdf,
-  onExportAttachmentsZip,
-  exportingRejectionsPdf,
-  exportingAttachmentsZip
-}: any) {
-  const [activeTab, setActiveTab] = useState("paie"); // "paie" or "audit"
 
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between h-full hover:border-indigo-150 transition-colors">
-      <div>
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-            <span>📊</span> Centre d'Exports
-          </h3>
-          <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] sm:text-xs">
-            <button
-              onClick={() => setActiveTab("paie")}
-              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md font-semibold transition-all ${
-                activeTab === "paie"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              👥 Paie (RH)
-            </button>
-            <button
-              onClick={() => setActiveTab("audit")}
-              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md font-semibold transition-all ${
-                activeTab === "audit"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🛡️ Audit
-            </button>
-          </div>
-        </div>
-
-        {activeTab === "paie" ? (
-          <div>
-            <p className="text-xs text-slate-500 leading-relaxed min-h-[48px]">
-              Générez un état récapitulatif des remboursements de frais approuvés par employé pour la période et les filtres sélectionnés.
-            </p>
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <button
-                onClick={onExportPayrollExcel}
-                disabled={exportingPayrollExcel}
-                className="inline-flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {exportingPayrollExcel ? "Export..." : "⬇ Excel Paie"}
-              </button>
-              <button
-                onClick={onExportPayrollPdf}
-                disabled={exportingPayrollPdf}
-                className="inline-flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold shadow-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {exportingPayrollPdf ? "PDF..." : "📄 PDF Paie"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <p className="text-xs text-slate-500 leading-relaxed min-h-[48px]">
-              Téléchargez en un clic tous les justificatifs (ZIP) et le registre des rejets motivés pour la période et les filtres sélectionnés.
-            </p>
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <button
-                onClick={onExportRejectionsPdf}
-                disabled={exportingRejectionsPdf}
-                className="inline-flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
-              >
-                {exportingRejectionsPdf ? "PDF..." : "📄 Rejets PDF"}
-              </button>
-              <button
-                onClick={onExportAttachmentsZip}
-                disabled={exportingAttachmentsZip}
-                className="inline-flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold shadow-sm bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {exportingAttachmentsZip ? "ZIP..." : "⬇ ZIP Reçus"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DashboardFilterBar({
-  period,
-  setPeriod,
-  selectedStatus,
-  setSelectedStatus,
-  selectedCategory,
-  setSelectedCategory,
-  selectedEmployee,
-  setSelectedEmployee,
-  categories,
-  employees,
-  showEmployeeFilter
-}: any) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-sm flex flex-wrap gap-4 items-center justify-between">
-      <div className="flex flex-wrap gap-3 items-center">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mr-1">
-          <span>🔍</span> Filtrer par :
-        </span>
-
-        {/* Date / Période */}
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="month">📅 Mois en cours</option>
-          <option value="quarter">📅 Trimestre</option>
-          <option value="year">📅 Année</option>
-        </select>
-
-        {/* Statut */}
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">🟢 Tous les statuts</option>
-          <option value="pending">🟡 En attente</option>
-          <option value="approved">🔵 Approuvés</option>
-          <option value="paid">🟢 Payés</option>
-          <option value="rejected">🔴 Rejetés</option>
-        </select>
-
-        {/* Catégorie */}
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">📂 Toutes les catégories</option>
-          {categories.map((cat: any) => (
-            <option key={cat.id} value={cat.id}>
-              📂 {cat.name}
-            </option>
-          ))}
-        </select>
-
-        {/* Collaborateur (Admin / Comptable uniquement) */}
-        {showEmployeeFilter && (
-          <select
-            value={selectedEmployee}
-            onChange={(e) => setSelectedEmployee(e.target.value)}
-            className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer max-w-[180px]"
-          >
-            <option value="">👥 Tous les collaborateurs</option>
-            {employees.map((emp: any) => (
-              <option key={emp.id} value={emp.id}>
-                👤 {emp.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      {/* Bouton de réinitialisation si des filtres sont actifs */}
-      {(selectedStatus || selectedCategory || selectedEmployee || period !== "month") && (
-        <button
-          onClick={() => {
-            setSelectedStatus("");
-            setSelectedCategory("");
-            setSelectedEmployee("");
-            setPeriod("month");
-          }}
-          className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-2 rounded-xl transition duration-150 flex items-center gap-1 shadow-sm"
-        >
-          <span>🔄</span> Réinitialiser
-        </button>
-      )}
-    </div>
-  );
-}
 
 function CashierDashboard({
   summary,
@@ -523,7 +372,7 @@ function CashierDashboard({
         <div className="flex flex-wrap gap-2">
           <QuickActionLink href="/dashboard/expenses?status=approved_accounting" label="💵 Bons à décaisser" color="bg-emerald-600 text-white hover:bg-emerald-700" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-amber-500 text-white hover:bg-amber-600" />
+          <QuickActionLink href="/dashboard/treasury" label="💵 Trésorerie" color="bg-amber-500 text-white hover:bg-amber-600" />
         </div>
       </div>
 
@@ -544,7 +393,7 @@ function CashierDashboard({
 
       <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
         <h3 className="text-lg font-black text-slate-900 mb-4">Derniers mouvements de caisse</h3>
-        <p className="text-sm text-slate-500">Pour voir le détail de vos caisses physiques, allouer des fonds ou consulter l'historique complet des opérations, rendez-vous dans l'onglet <Link href="/dashboard/caisse" className="text-indigo-600 font-semibold underline">Trésorerie & Caisses</Link>.</p>
+        <p className="text-sm text-slate-500">Pour voir le détail de vos caisses physiques, allouer des fonds ou consulter l'historique complet des opérations, rendez-vous dans l'onglet <Link href="/dashboard/treasury" className="text-indigo-600 font-semibold underline">Trésorerie</Link>.</p>
       </div>
     </>
   );
@@ -556,21 +405,8 @@ function AccountantDashboard({
   trendData, 
   recentExpenses, 
   loading, 
-  onExportExcel, 
-  onExportPdf, 
-  exportingExcel, 
-  exportingPdf, 
   isBackupManager, 
   currency,
-  onExportPayrollExcel,
-  onExportPayrollPdf,
-  exportingPayrollExcel,
-  exportingPayrollPdf,
-  onExportRejectionsPdf,
-  onExportAttachmentsZip,
-  exportingRejectionsPdf,
-  exportingAttachmentsZip,
-  // filters props
   period,
   setPeriod,
   selectedStatus,
@@ -579,8 +415,17 @@ function AccountantDashboard({
   setSelectedCategory,
   selectedEmployee,
   setSelectedEmployee,
+  selectedProject,
+  setSelectedProject,
+  selectedDepartment,
+  setSelectedDepartment,
+  selectedCaisse,
+  setSelectedCaisse,
   categories,
-  employees
+  employees,
+  projects,
+  departments,
+  caisses
 }: any) {
   return (
     <>
@@ -593,17 +438,9 @@ function AccountantDashboard({
           <QuickActionLink href="/dashboard/expenses?status=approved" label="💳 Bons à payer" color="bg-emerald-600 text-white hover:bg-emerald-700" />
           <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/treasury" label="💵 Trésorerie" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/accounting/plan" label="🗺️ Plan Comptable" color="bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-            {exportingExcel ? "Excel..." : "⬇ Excel global"}
-          </button>
-          <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
-            {exportingPdf ? "PDF..." : "📄 Rapport PDF"}
-          </button>
+          <QuickActionLink href="/dashboard/exports" label="📁 Centre d'Exports" color="bg-violet-600 text-white hover:bg-violet-700" />
         </div>
       </div>
 
@@ -616,8 +453,17 @@ function AccountantDashboard({
         setSelectedCategory={setSelectedCategory}
         selectedEmployee={selectedEmployee}
         setSelectedEmployee={setSelectedEmployee}
+        selectedProject={selectedProject}
+        setSelectedProject={setSelectedProject}
+        selectedDepartment={selectedDepartment}
+        setSelectedDepartment={setSelectedDepartment}
+        selectedCaisse={selectedCaisse}
+        setSelectedCaisse={setSelectedCaisse}
         categories={categories}
         employees={employees}
+        projects={projects}
+        departments={departments}
+        caisses={caisses}
         showEmployeeFilter={true}
       />
 
@@ -631,16 +477,7 @@ function AccountantDashboard({
               <KpiCard icon={<TotalIcon />} label="Bons payés" value={String(summary.paid_count)} color="bg-emerald-100 text-emerald-600 animate-fade-in" />
             </div>
             <div className="md:col-span-1">
-              <ExportCenterCard
-                onExportPayrollExcel={onExportPayrollExcel}
-                onExportPayrollPdf={onExportPayrollPdf}
-                exportingPayrollExcel={exportingPayrollExcel}
-                exportingPayrollPdf={exportingPayrollPdf}
-                onExportRejectionsPdf={onExportRejectionsPdf}
-                onExportAttachmentsZip={onExportAttachmentsZip}
-                exportingRejectionsPdf={exportingRejectionsPdf}
-                exportingAttachmentsZip={exportingAttachmentsZip}
-              />
+              
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -666,20 +503,7 @@ function AdminDashboard({
   trendData, 
   recentExpenses, 
   loading, 
-  onExportExcel, 
-  onExportPdf, 
-  exportingExcel, 
-  exportingPdf, 
   currency,
-  onExportPayrollExcel,
-  onExportPayrollPdf,
-  exportingPayrollExcel,
-  exportingPayrollPdf,
-  onExportRejectionsPdf,
-  onExportAttachmentsZip,
-  exportingRejectionsPdf,
-  exportingAttachmentsZip,
-  // filters props
   period,
   setPeriod,
   selectedStatus,
@@ -688,8 +512,17 @@ function AdminDashboard({
   setSelectedCategory,
   selectedEmployee,
   setSelectedEmployee,
+  selectedProject,
+  setSelectedProject,
+  selectedDepartment,
+  setSelectedDepartment,
+  selectedCaisse,
+  setSelectedCaisse,
   categories,
-  employees
+  employees,
+  projects,
+  departments,
+  caisses
 }: any) {
   return (
     <>
@@ -698,19 +531,11 @@ function AdminDashboard({
           <QuickActionLink href="/dashboard/expenses/new" label="➕ Nouveau bon" color="bg-indigo-600 text-white hover:bg-indigo-700" />
           <QuickActionLink href="/dashboard/expenses" label="📋 Tous les bons" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/advances" label="💰 Avances de caisse" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/caisse" label="💵 Trésorerie & Caisses" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
+          <QuickActionLink href="/dashboard/treasury" label="💵 Trésorerie" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/users" label="👥 Équipe" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/company" label="🏢 Société" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
           <QuickActionLink href="/dashboard/accounting" label="⚙️ Param. Comptables" color="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50" />
-          <QuickActionLink href="/dashboard/accounting/plan" label="🗺️ Plan Comptable" color="bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onExportExcel} disabled={exportingExcel} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-            {exportingExcel ? "Excel..." : "⬇ Excel global"}
-          </button>
-          <button onClick={onExportPdf} disabled={exportingPdf} className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
-            {exportingPdf ? "PDF..." : "📄 Rapport PDF"}
-          </button>
+          <QuickActionLink href="/dashboard/exports" label="📁 Centre d'Exports" color="bg-violet-600 text-white hover:bg-violet-700" />
         </div>
       </div>
 
@@ -723,8 +548,17 @@ function AdminDashboard({
         setSelectedCategory={setSelectedCategory}
         selectedEmployee={selectedEmployee}
         setSelectedEmployee={setSelectedEmployee}
+        selectedProject={selectedProject}
+        setSelectedProject={setSelectedProject}
+        selectedDepartment={selectedDepartment}
+        setSelectedDepartment={setSelectedDepartment}
+        selectedCaisse={selectedCaisse}
+        setSelectedCaisse={setSelectedCaisse}
         categories={categories}
         employees={employees}
+        projects={projects}
+        departments={departments}
+        caisses={caisses}
         showEmployeeFilter={true}
       />
 
@@ -738,16 +572,7 @@ function AdminDashboard({
               <KpiCard icon={<ChartIcon />} label="Taux d'approbation" value={`${summary.approval_rate}%`} color="bg-emerald-100 text-emerald-600 animate-fade-in" />
             </div>
             <div className="md:col-span-1">
-              <ExportCenterCard
-                onExportPayrollExcel={onExportPayrollExcel}
-                onExportPayrollPdf={onExportPayrollPdf}
-                exportingPayrollExcel={exportingPayrollExcel}
-                exportingPayrollPdf={exportingPayrollPdf}
-                onExportRejectionsPdf={onExportRejectionsPdf}
-                onExportAttachmentsZip={onExportAttachmentsZip}
-                exportingRejectionsPdf={exportingRejectionsPdf}
-                exportingAttachmentsZip={exportingAttachmentsZip}
-              />
+              
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -811,8 +636,14 @@ export default function DashboardPage() {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedCaisse, setSelectedCaisse] = useState("");
   const [categories, setCategories] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [caisses, setCaisses] = useState<any[]>([]);
   const [myCompanies, setMyCompanies] = useState<any[]>([]);
   const [switchingCompany, setSwitchingCompany] = useState(false);
 
@@ -895,31 +726,32 @@ export default function DashboardPage() {
 
 
 
-  // Load categories and employees on mount for filters
+  // Load categories, employees, projects, departments and caisses on mount for filters
   useEffect(() => {
     if (!user) return;
     // Always load categories for everyone
     api.getCategories(true)
-      .then(res => setCategories(res as any[]))
-      .catch(err => console.error("Failed to load categories", err));
+      .then((cats: any) => setCategories(cats))
+      .catch(() => {});
 
-    // Load employees for roles that can filter employees
-    if (["admin", "super_admin", "accountant", "manager"].includes(user.role) || user.is_backup_manager || user.is_backup_accountant) {
+    // Load employees, projects, departments and caisses for admin/accountant
+    if (user.role === "admin" || user.role === "accountant") {
       api.getUsers()
-        .then(res => setEmployees(res as any[]))
-        .catch(err => console.error("Failed to load users", err));
-    }
+        .then((data: any) => setEmployees(data.items || []))
+        .catch(() => {});
 
-    // Load available workspaces
-    api.getMyCompanies()
-      .then(res => {
-        const comps = res as any[];
-        // Only show switcher if there's more than one company accessible
-        if (comps && comps.length > 1) {
-          setMyCompanies(comps);
-        }
-      })
-      .catch(err => console.error("Failed to load workspaces", err));
+      api.listProjects()
+        .then((p: any) => setProjects(p || []))
+        .catch(() => {});
+
+      api.getDepartments()
+        .then((d: any) => setDepartments(d || []))
+        .catch(() => {});
+
+      api.listCashSources()
+        .then((c: any) => setCaisses(c || []))
+        .catch(() => {});
+    }
   }, [user]);
 
   const handleSwitchCompany = async (companyId: string) => {
@@ -1111,78 +943,7 @@ export default function DashboardPage() {
     );
   }
 
-  const [exportingExcel, setExportingExcel] = useState(false);
-  const [exportingPdf, setExportingPdf] = useState(false);
-  const [exportingPayrollExcel, setExportingPayrollExcel] = useState(false);
-  const [exportingPayrollPdf, setExportingPayrollPdf] = useState(false);
-  const [exportingRejectionsPdf, setExportingRejectionsPdf] = useState(false);
-  const [exportingAttachmentsZip, setExportingAttachmentsZip] = useState(false);
 
-  const handleExportRejectionsPdf = async () => {
-    setExportingRejectionsPdf(true);
-    try {
-      await api.exportRejectedExpensesPdf(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export du registre des rejets");
-    } finally {
-      setExportingRejectionsPdf(false);
-    }
-  };
-
-  const handleExportAttachmentsZip = async () => {
-    setExportingAttachmentsZip(true);
-    try {
-      await api.exportAttachmentsZip(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export des justificatifs");
-    } finally {
-      setExportingAttachmentsZip(false);
-    }
-  };
-
-  const handleExportExcel = async () => {
-    setExportingExcel(true);
-    try {
-      await api.exportExpensesExcel(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export Excel");
-    } finally {
-      setExportingExcel(false);
-    }
-  };
-
-  const handleExportPdf = async () => {
-    setExportingPdf(true);
-    try {
-      await api.exportExpensesPdf(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export PDF");
-    } finally {
-      setExportingPdf(false);
-    }
-  };
-
-  const handleExportPayrollExcel = async () => {
-    setExportingPayrollExcel(true);
-    try {
-      await api.exportPayrollExcel(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export Excel Paie");
-    } finally {
-      setExportingPayrollExcel(false);
-    }
-  };
-
-  const handleExportPayrollPdf = async () => {
-    setExportingPayrollPdf(true);
-    try {
-      await api.exportPayrollPdf(buildDateRange(period));
-    } catch {
-      alert("Erreur lors de l'export PDF Paie");
-    } finally {
-      setExportingPayrollPdf(false);
-    }
-  };
 
   const greetings: Record<string, string> = {
     employee: `Bonjour, ${user.name} 👋`,
@@ -1197,18 +958,6 @@ export default function DashboardPage() {
     trendData,
     recentExpenses,
     loading: dataLoading,
-    onExportExcel: handleExportExcel,
-    onExportPdf: handleExportPdf,
-    exportingExcel,
-    exportingPdf,
-    onExportPayrollExcel: handleExportPayrollExcel,
-    onExportPayrollPdf: handleExportPayrollPdf,
-    exportingPayrollExcel,
-    exportingPayrollPdf,
-    onExportRejectionsPdf: handleExportRejectionsPdf,
-    onExportAttachmentsZip: handleExportAttachmentsZip,
-    exportingRejectionsPdf,
-    exportingAttachmentsZip,
     period,
     setPeriod,
     selectedStatus,
@@ -1219,6 +968,15 @@ export default function DashboardPage() {
     setSelectedEmployee,
     categories,
     employees,
+    selectedProject,
+    setSelectedProject,
+    selectedDepartment,
+    setSelectedDepartment,
+    selectedCaisse,
+    setSelectedCaisse,
+    projects,
+    departments,
+    caisses,
     isBackupAccountant: user.is_backup_accountant,
     isBackupManager: user.is_backup_manager,
     currency: companyCurrency,

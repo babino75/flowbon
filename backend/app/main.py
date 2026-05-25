@@ -19,6 +19,7 @@ from app.routes.fiscal_years import router as fiscal_years_router
 from app.routes.suggestions import router as suggestions_router
 from app.routes.cash_register import router as cash_registers_router
 from app.routes.projects import router as projects_router
+from app.routes.treasury import router as treasury_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -62,6 +63,7 @@ app.include_router(fiscal_years_router)
 app.include_router(suggestions_router)
 app.include_router(cash_registers_router)
 app.include_router(projects_router)
+app.include_router(treasury_router)
 
 
 from fastapi.staticfiles import StaticFiles

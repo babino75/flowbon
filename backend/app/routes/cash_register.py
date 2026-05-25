@@ -40,7 +40,8 @@ def get_cash_register_for_company(db: Session, caisse_id: str, current_user: Use
 
     # Sécurité : Si l'utilisateur est un caissier, il doit être assigné à cette caisse
     if caisse and current_user.role == "cashier":
-        if current_user not in caisse.cashiers:
+        # Compare by id to avoid cross-session ORM object identity issues
+        if not any(u.id == current_user.id for u in caisse.cashiers):
             return None
             
     return caisse

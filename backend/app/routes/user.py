@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel
 
 from app.core.dependencies import get_current_active_user, get_db
 from app.core.security import hash_password
@@ -10,6 +11,11 @@ from app.schemas.user import UserCreate, UserRoleUpdate, UserResponse
 from app.services.tenant import get_user_for_company, list_users_for_company
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+class ScopeUpdateSchema(BaseModel):
+    scope_type: str
+    scope_id: Optional[str] = None
 
 
 @router.get("/me/companies")
@@ -127,7 +133,7 @@ def update_user_role(
 @router.put("/{user_id}/departments", response_model=UserResponse)
 def update_user_departments(
     user_id: str,
-    department_ids: list[str],
+    department_ids: list[str] = Query(default=[]),
     primary_department_id: str | None = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -193,6 +199,31 @@ def deactivate_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé")
 
     user.is_active = False
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}/scope", response_model=UserResponse)
+def update_user_scope(
+    user_id: str,
+    payload: ScopeUpdateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Permet à l'admin de définir le scope (GLOBAL/DEPARTMENT/PROJECT) d'un utilisateur."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
+    user = get_user_for_company(db, user_id, current_user)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé")
+
+    if payload.scope_type not in ["GLOBAL", "DEPARTMENT", "PROJECT", "TREASURY"]:
+        raise HTTPException(status_code=400, detail="scope_type invalide")
+
+    user.scope_type = payload.scope_type
+    user.scope_id = payload.scope_id
     db.commit()
     db.refresh(user)
     return user
